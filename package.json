@@ -1,0 +1,22 @@
+{
+  "name": "depositsystem-backend",
+  "version": "1.0.0",
+  "description": "Backend services and Convex functions for CryptoVault Pro",
+  "main": "index.js",
+  "scripts": {
+    "dev": "convex dev",
+    "listener": "ts-node services/blockchainListener.ts",
+    "processor": "ts-node services/withdrawalProcessor.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "convex": "^1.39.1",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.11.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.24",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
