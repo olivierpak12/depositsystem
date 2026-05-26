@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'providers/wallet_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/admin_provider.dart';
@@ -37,16 +38,27 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: '/login', builder: (context, state) => const AuthScreen()),
       GoRoute(path: '/verify-email', builder: (context, state) => const VerifyEmailScreen()),
-      GoRoute(path: '/', builder: (context, state) => const DashboardScreen()),
-      GoRoute(path: '/deposit', builder: (context, state) => const DepositScreen()),
-      GoRoute(path: '/withdraw', builder: (context, state) => const WithdrawScreen()),
-      GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen()),
-      GoRoute(path: '/admin', builder: (context, state) => const AdminDashboardScreen()),
-      GoRoute(path: '/admin/users', builder: (context, state) => const UserManagementScreen()),
+      ShellRoute(
+        builder: (context, state, child) => MainShell(child: child),
+        routes: [
+          GoRoute(path: '/', builder: (context, state) => const DashboardScreen()),
+          GoRoute(path: '/level', builder: (context, state) => const LevelScreen()),
+          GoRoute(path: '/bike', builder: (context, state) => const BikeScreen()),
+          GoRoute(path: '/team', builder: (context, state) => const TeamScreen()),
+          GoRoute(path: '/my', builder: (context, state) => const SettingsScreen()),
+          GoRoute(path: '/deposit', builder: (context, state) => const DepositScreen()),
+          GoRoute(path: '/withdraw', builder: (context, state) => const WithdrawScreen()),
+          GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen()),
+          GoRoute(path: '/admin', builder: (context, state) => const AdminDashboardScreen()),
+          GoRoute(path: '/admin/users', builder: (context, state) => const UserManagementScreen()),
+        ],
+      ),
     ],
     redirect: (context, state) {
       final auth = ref.read(authProvider);
       final path = state.uri.path;
+
+      if (!auth.sessionRestored) return null;
 
       final isLoggingIn = path == '/login';
       final isVerifying = path == '/verify-email';
@@ -83,6 +95,14 @@ class CryptoVaultApp extends ConsumerWidget {
           surface: const Color(0xFF0F0F0F),
         ),
         textTheme: GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme),
+        navigationBarTheme: const NavigationBarThemeData(
+          backgroundColor: Color(0xFF141414),
+          indicatorColor: Color(0xFF00C853),
+        ),
+        navigationRailTheme: const NavigationRailThemeData(
+          backgroundColor: Color(0xFF141414),
+          indicatorColor: Color(0xFF00C853),
+        ),
         appBarTheme: const AppBarTheme(
           centerTitle: true,
           backgroundColor: Colors.transparent,
@@ -91,6 +111,146 @@ class CryptoVaultApp extends ConsumerWidget {
         ),
       ),
       routerConfig: router,
+    );
+  }
+}
+
+// --- Replaceable Carousel Data ---
+// To swap products, just edit this list. Each entry: title, subtitle, imageAsset/URL, tag.
+final List<Map<String, String>> carouselProducts = [
+  {
+    'title': 'Crypto Savings Vault',
+    'subtitle': 'Earn up to 8% APY on stablecoins',
+    'image': 'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=600&h=300&fit=crop',
+    'tag': 'Featured',
+  },
+  {
+    'title': 'Instant Cross-Chain Bridge',
+    'subtitle': 'Move assets across 10+ networks in seconds',
+    'image': 'https://images.unsplash.com/photo-1621761191319-c6fb62004040?w=600&h=300&fit=crop',
+    'tag': 'New',
+  },
+  {
+    'title': 'DeFi Yield Optimizer',
+    'subtitle': 'Auto-compound returns with one click',
+    'image': 'https://images.unsplash.com/photo-1642790106117-e829e14a795f?w=600&h=300&fit=crop',
+    'tag': 'Popular',
+  },
+];
+
+// --- Responsive Main Shell ---
+class MainShell extends StatelessWidget {
+  final Widget child;
+  const MainShell({super.key, required this.child});
+
+  static const _navItems = [
+    ('/', Icons.home_rounded, 'Home'),
+    ('/level', Icons.auto_graph_rounded, 'Level'),
+    ('/bike', Icons.directions_bike_rounded, 'Bike'),
+    ('/team', Icons.people_rounded, 'Team'),
+    ('/my', Icons.person_rounded, 'My'),
+  ];
+
+  int _resolveIndex(String path) {
+    for (int i = 0; i < _navItems.length; i++) {
+      if (path == _navItems[i].$1) return i;
+    }
+    if (path == '/settings') return 4;
+    if (path.startsWith('/admin')) return 4;
+    if (path == '/deposit' || path == '/withdraw') return 0;
+    return 0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final location = GoRouterState.of(context).uri.path;
+    final currentIndex = _resolveIndex(location);
+    final isDesktop = MediaQuery.of(context).size.width >= 720;
+    final colorScheme = Theme.of(context).colorScheme;
+
+    if (isDesktop) {
+      return Row(
+        children: [
+          NavigationRail(
+            selectedIndex: currentIndex,
+            onDestinationSelected: (i) => context.go(_navItems[i].$1),
+            labelType: NavigationRailLabelType.all,
+            minExtendedWidth: 200,
+            groupAlignment: -0.3,
+            backgroundColor: const Color(0xFF0A0A0A),
+            indicatorColor: colorScheme.primary.withValues(alpha: 0.2),
+            leading: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Icon(Icons.shield_rounded, size: 32, color: colorScheme.primary),
+            ),
+            destinations: _navItems.map((item) => NavigationRailDestination(
+              icon: Icon(item.$2),
+              selectedIcon: Icon(item.$2, color: colorScheme.primary),
+              label: Text(item.$3, style: const TextStyle(fontWeight: FontWeight.w600)),
+            )).toList(),
+          ),
+          const VerticalDivider(width: 1, color: Colors.white12),
+          Expanded(child: child),
+        ],
+      );
+    }
+
+    return Scaffold(
+      body: child,
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: Colors.white12, width: 0.5)),
+        ),
+        child: BottomNavigationBar(
+          currentIndex: currentIndex,
+          onTap: (i) => context.go(_navItems[i].$1),
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: const Color(0xFF0F0F0F),
+          selectedItemColor: colorScheme.primary,
+          unselectedItemColor: Colors.white38,
+          selectedFontSize: 11,
+          unselectedFontSize: 11,
+          items: _navItems.map((item) => BottomNavigationBarItem(
+            icon: Icon(item.$2),
+            activeIcon: Icon(item.$2, color: colorScheme.primary),
+            label: item.$3,
+          )).toList(),
+        ),
+      ),
+    );
+  }
+}
+
+// --- Placeholder screens for Level, Bike, Team ---
+class LevelScreen extends StatelessWidget {
+  const LevelScreen({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('LEVEL PROGRESS')),
+      body: const Center(child: Text('Level & progress tracking coming soon', style: TextStyle(color: Colors.white54))),
+    );
+  }
+}
+
+class BikeScreen extends StatelessWidget {
+  const BikeScreen({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('BIKE TRACKER')),
+      body: const Center(child: Text('Bike tracking features coming soon', style: TextStyle(color: Colors.white54))),
+    );
+  }
+}
+
+class TeamScreen extends StatelessWidget {
+  const TeamScreen({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('TEAM HUB')),
+      body: const Center(child: Text('Team management coming soon', style: TextStyle(color: Colors.white54))),
     );
   }
 }
@@ -168,6 +328,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
+    final Size size = MediaQuery.of(context).size;
+    final bool isDesktop = size.width > 900;
+    final bool isTablet = size.width > 600;
+    final double horizontalPadding = isDesktop ? size.width * 0.25 : isTablet ? size.width * 0.15 : 24.0;
 
     return Scaffold(
       body: Container(
@@ -178,82 +342,87 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             colors: [Colors.green.withValues(alpha: 0.05), Colors.black],
           ),
         ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 30.0, vertical: 60),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Icon(Icons.shield_rounded, size: 70, color: Color(0xFF00C853)),
-              const SizedBox(height: 15),
-              Text(
-                'CryptoVault Pro',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.orbitron(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
-              ),
-              const SizedBox(height: 30),
-              
-              _buildTextField('Email Address', Icons.email_outlined, _emailCtrl),
-              const SizedBox(height: 15),
-              _buildTextField(
-                'Password', 
-                Icons.lock_outline, 
-                _passCtrl, 
-                obscureText: _obscurePass,
-                suffixIcon: IconButton(
-                  icon: Icon(_obscurePass ? Icons.visibility_off : Icons.visibility, color: Colors.greenAccent),
-                  onPressed: () => setState(() => _obscurePass = !_obscurePass),
-                ),
-              ),
-              
-              if (!_isLogin) ...[
-                const SizedBox(height: 15),
-                _buildTextField(
-                  'Confirm Password', 
-                  Icons.lock_reset, 
-                  _confirmPassCtrl, 
-                  obscureText: _obscureConfirmPass,
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscureConfirmPass ? Icons.visibility_off : Icons.visibility, color: Colors.greenAccent),
-                    onPressed: () => setState(() => _obscureConfirmPass = !_obscureConfirmPass),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.symmetric(horizontal: horizontalPadding, vertical: 60),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Icon(Icons.shield_rounded, size: 70, color: Color(0xFF00C853)),
+                  const SizedBox(height: 15),
+                  Text(
+                    'CryptoVault Pro',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.orbitron(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
                   ),
-                ),
-                const SizedBox(height: 15),
-                _buildTextField(
-                  'Transaction Password', 
-                  Icons.enhanced_encryption_outlined, 
-                  _transPassCtrl, 
-                  obscureText: _obscureTransPass,
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscureTransPass ? Icons.visibility_off : Icons.visibility, color: Colors.greenAccent),
-                    onPressed: () => setState(() => _obscureTransPass = !_obscureTransPass),
+                  const SizedBox(height: 30),
+                  
+                  _buildTextField('Email Address', Icons.email_outlined, _emailCtrl),
+                  const SizedBox(height: 15),
+                  _buildTextField(
+                    'Password', 
+                    Icons.lock_outline, 
+                    _passCtrl, 
+                    obscureText: _obscurePass,
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscurePass ? Icons.visibility_off : Icons.visibility, color: Colors.greenAccent),
+                      onPressed: () => setState(() => _obscurePass = !_obscurePass),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 15),
-                _buildTextField('Invitation Code (Optional)', Icons.card_giftcard, _inviteCtrl),
-              ],
-              
-              const SizedBox(height: 30),
-              ElevatedButton(
-                onPressed: authState.isLoading ? null : _handleSubmit,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF00C853),
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(vertical: 18),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                ),
-                child: authState.isLoading
-                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                    : Text(_isLogin ? 'Access Wallet' : 'Create Account', 
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              ),
+                  
+                  if (!_isLogin) ...[
+                    const SizedBox(height: 15),
+                    _buildTextField(
+                      'Confirm Password', 
+                      Icons.lock_reset, 
+                      _confirmPassCtrl, 
+                      obscureText: _obscureConfirmPass,
+                      suffixIcon: IconButton(
+                        icon: Icon(_obscureConfirmPass ? Icons.visibility_off : Icons.visibility, color: Colors.greenAccent),
+                        onPressed: () => setState(() => _obscureConfirmPass = !_obscureConfirmPass),
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+                    _buildTextField(
+                      'Transaction Password', 
+                      Icons.enhanced_encryption_outlined, 
+                      _transPassCtrl, 
+                      obscureText: _obscureTransPass,
+                      suffixIcon: IconButton(
+                        icon: Icon(_obscureTransPass ? Icons.visibility_off : Icons.visibility, color: Colors.greenAccent),
+                        onPressed: () => setState(() => _obscureTransPass = !_obscureTransPass),
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+                    _buildTextField('Invitation Code (Optional)', Icons.card_giftcard, _inviteCtrl),
+                  ],
+                  
+                  const SizedBox(height: 30),
+                  ElevatedButton(
+                    onPressed: authState.isLoading ? null : _handleSubmit,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00C853),
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                    ),
+                    child: authState.isLoading
+                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                        : Text(_isLogin ? 'Access Wallet' : 'Create Account', 
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  ),
 
-              const SizedBox(height: 10),
-              TextButton(
-                onPressed: () => setState(() => _isLogin = !_isLogin),
-                child: Text(_isLogin ? "Don't have an account? Register" : "Already have an account? Login", style: const TextStyle(color: Colors.greenAccent)),
+                  const SizedBox(height: 10),
+                  TextButton(
+                    onPressed: () => setState(() => _isLogin = !_isLogin),
+                    child: Text(_isLogin ? "Don't have an account? Register" : "Already have an account? Login", style: const TextStyle(color: Colors.greenAccent)),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -288,7 +457,7 @@ class VerifyEmailScreen extends ConsumerWidget {
 
     return Scaffold(
       body: Center(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(40.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -368,7 +537,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       body: RefreshIndicator(
         onRefresh: () async {
           await ref.read(authProvider.notifier).refreshUser();
-          // Force wait for transactions sync to finish before refreshing balance
           await ref.refresh(transactionsProvider(userId).future);
           ref.refresh(balanceProvider(userId));
         },
@@ -377,6 +545,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           padding: const EdgeInsets.all(20),
           child: Column(
             children: [
+              const _ImageCarousel(),
+              const SizedBox(height: 24),
               balanceAsync.when(
                 data: (balance) => _PortfolioCard(balance: balance, isAdmin: auth.isAdmin),
                 loading: () => _PortfolioCard(balance: "...", isLoading: true, isAdmin: auth.isAdmin),
@@ -390,6 +560,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   Expanded(child: _ActionTile(icon: Icons.arrow_circle_up_outlined, label: 'Withdraw', color: Colors.orangeAccent, onTap: () => context.push('/withdraw'))),
                 ],
               ),
+              const SizedBox(height: 32),
+              const _VideoExplainer(),
+              const SizedBox(height: 32),
+              const _OurProductSection(),
               const SizedBox(height: 40),
               const _RecentActivityHeader(),
               const SizedBox(height: 20),
@@ -402,6 +576,266 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+// --- Image Carousel (easily replaceable via carouselProducts list at top) ---
+class _ImageCarousel extends StatefulWidget {
+  const _ImageCarousel();
+
+  @override
+  State<_ImageCarousel> createState() => _ImageCarouselState();
+}
+
+class _ImageCarouselState extends State<_ImageCarousel> {
+  final _pageCtrl = PageController(viewportFraction: 0.92);
+  int _current = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (_pageCtrl.hasClients) {
+        final next = (_current + 1) % carouselProducts.length;
+        _pageCtrl.animateToPage(next, duration: const Duration(milliseconds: 500), curve: Curves.easeInOut);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _pageCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        SizedBox(
+          height: 180,
+          child: PageView.builder(
+            controller: _pageCtrl,
+            onPageChanged: (i) => setState(() => _current = i),
+            itemCount: carouselProducts.length,
+            itemBuilder: (context, i) {
+              final p = carouselProducts[i];
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 6),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  image: DecorationImage(
+                    image: NetworkImage(p['image']!),
+                    fit: BoxFit.cover,
+                    onError: (_, __) {},
+                  ),
+                ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    gradient: LinearGradient(
+                      begin: Alignment.bottomCenter,
+                      end: Alignment.center,
+                      colors: [Colors.black.withValues(alpha: 0.85), Colors.transparent],
+                    ),
+                  ),
+                  padding: const EdgeInsets.all(16),
+                  alignment: Alignment.bottomLeft,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF00C853),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(p['tag'] ?? '', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.black)),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(p['title']!, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                      const SizedBox(height: 2),
+                      Text(p['subtitle']!, style: const TextStyle(fontSize: 12, color: Colors.white70)),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(carouselProducts.length, (i) {
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              width: _current == i ? 22 : 8,
+              height: 8,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(4),
+                color: _current == i ? const Color(0xFF00C853) : Colors.white24,
+              ),
+            );
+          }),
+        ),
+      ],
+    );
+  }
+}
+
+// --- Video Explainer Section ---
+class _VideoExplainer extends StatelessWidget {
+  const _VideoExplainer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Icon(Icons.play_circle_fill, color: Color(0xFF00C853), size: 22),
+            SizedBox(width: 8),
+            Text('How It Works', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        GestureDetector(
+          onTap: () async {
+            final url = Uri.parse('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+            if (await canLaunchUrl(url)) {
+              await launchUrl(url, mode: LaunchMode.externalApplication);
+            }
+          },
+          child: Container(
+            height: 200,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              gradient: const LinearGradient(
+                colors: [Color(0xFF1B5E20), Color(0xFF0D0D0D)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.play_circle_fill, size: 64, color: Color(0xFF00C853)),
+                    const SizedBox(height: 12),
+                    Text('Watch: How CryptoVault Protects Your Assets',
+                      style: TextStyle(fontSize: 14, color: Colors.white.withValues(alpha: 0.8)),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 6),
+                    const Text('Tap to watch on YouTube', style: TextStyle(fontSize: 11, color: Colors.white38)),
+                  ],
+                ),
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(8)),
+                    child: const Text('LIVE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// --- Our Product Section (mirrors the video content with our company) ---
+class _OurProductSection extends StatelessWidget {
+  const _OurProductSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        color: const Color(0xFF0D0D0D),
+        border: Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00C853).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.shield_rounded, color: Color(0xFF00C853), size: 22),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text('How CryptoVault Helps', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _benefitRow(Icons.verified_user_rounded, 'Military-grade encryption keeps your funds safe at all times.'),
+          const SizedBox(height: 10),
+          _benefitRow(Icons.swap_horiz_rounded, 'Instant deposits and withdrawals across all major blockchain networks.'),
+          const SizedBox(height: 10),
+          _benefitRow(Icons.trending_up_rounded, 'Real-time balance tracking with automated sweep consolidation.'),
+          const SizedBox(height: 10),
+          _benefitRow(Icons.support_agent_rounded, '24/7 monitoring and support — our team never sleeps on security.'),
+          const SizedBox(height: 18),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              gradient: LinearGradient(
+                colors: [const Color(0xFF00C853).withValues(alpha: 0.08), const Color(0xFF00C853).withValues(alpha: 0.02)],
+              ),
+              border: Border.all(color: const Color(0xFF00C853).withValues(alpha: 0.12)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.auto_awesome, color: Color(0xFF00C853), size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Trusted by 10,000+ users worldwide. Start protecting your crypto today.',
+                    style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.7)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _benefitRow(IconData icon, String text) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: const Color(0xFF00C853)),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(text, style: const TextStyle(fontSize: 13, color: Colors.white70, height: 1.3)),
+        ),
+      ],
     );
   }
 }

@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
 
 class AuthState {
@@ -11,6 +11,7 @@ class AuthState {
   final bool isLoading;
   final String? error;
   final bool skippedVerification;
+  final bool sessionRestored;
 
   AuthState({
     this.userId,
@@ -20,6 +21,7 @@ class AuthState {
     this.isLoading = false,
     this.error,
     this.skippedVerification = false,
+    this.sessionRestored = false,
   });
 
   bool get isAdmin => role == 'admin';
@@ -32,6 +34,7 @@ class AuthState {
     bool? isLoading,
     String? error,
     bool? skippedVerification,
+    bool? sessionRestored,
   }) {
     return AuthState(
       userId: userId ?? this.userId,
@@ -41,28 +44,40 @@ class AuthState {
       isLoading: isLoading ?? this.isLoading,
       error: error,
       skippedVerification: skippedVerification ?? this.skippedVerification,
+      sessionRestored: sessionRestored ?? this.sessionRestored,
     );
   }
 }
 
 class AuthNotifier extends StateNotifier<AuthState> {
   final Ref ref;
-  final _storage = const FlutterSecureStorage();
 
   AuthNotifier(this.ref) : super(AuthState()) {
     _loadSession();
   }
 
   Future<void> _loadSession() async {
-    final userId = await _storage.read(key: 'userId');
-    final email = await _storage.read(key: 'email');
-    final role = await _storage.read(key: 'role');
-    final verified = await _storage.read(key: 'emailVerified') == 'true';
-    
-    if (userId != null) {
-      state = AuthState(userId: userId, email: email, role: role, isEmailVerified: verified);
-      // Automatically refresh user data to catch role changes
-      await refreshUser();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString('userId');
+      final email = prefs.getString('email');
+      final role = prefs.getString('role');
+      final verified = prefs.getBool('emailVerified') ?? false;
+
+      if (userId != null) {
+        state = AuthState(
+          userId: userId,
+          email: email,
+          role: role,
+          isEmailVerified: verified,
+          sessionRestored: true,
+        );
+        await refreshUser();
+      } else {
+        state = state.copyWith(sessionRestored: true);
+      }
+    } catch (_) {
+      state = state.copyWith(sessionRestored: true);
     }
   }
 
@@ -72,20 +87,20 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final apiService = ref.read(apiServiceProvider);
       final response = await apiService.getUser(state.userId!);
       final userData = response.data;
-      
+
       if (userData != null) {
         final newRole = userData['role'] ?? 'user';
         final isVerified = userData['emailVerified'] ?? false;
-        
-        // Update storage and state if something changed
+
         if (newRole != state.role || isVerified != state.isEmailVerified) {
-          await _storage.write(key: 'role', value: newRole);
-          await _storage.write(key: 'emailVerified', value: isVerified.toString());
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('role', newRole);
+          await prefs.setBool('emailVerified', isVerified);
           state = state.copyWith(role: newRole, isEmailVerified: isVerified);
         }
       }
     } catch (e) {
-      print("Session refresh failed: $e");
+      // Silent fail — session data from storage is sufficient for offline
     }
   }
 
@@ -108,18 +123,25 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final apiService = ref.read(apiServiceProvider);
       final response = await apiService.login(email, password);
-      
+
       final userId = response.data['_id'];
       final userEmail = response.data['email'];
       final userRole = response.data['role'] ?? 'user';
       final isVerified = response.data['emailVerified'] ?? false;
 
-      await _storage.write(key: 'userId', value: userId);
-      await _storage.write(key: 'email', value: userEmail);
-      await _storage.write(key: 'role', value: userRole);
-      await _storage.write(key: 'emailVerified', value: isVerified.toString());
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('userId', userId);
+      await prefs.setString('email', userEmail);
+      await prefs.setString('role', userRole);
+      await prefs.setBool('emailVerified', isVerified);
 
-      state = AuthState(userId: userId, email: userEmail, role: userRole, isEmailVerified: isVerified);
+      state = AuthState(
+        userId: userId,
+        email: userEmail,
+        role: userRole,
+        isEmailVerified: isVerified,
+        sessionRestored: true,
+      );
       return true;
     } catch (e) {
       state = state.copyWith(isLoading: false, error: _handleError(e));
@@ -142,7 +164,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         transactionPassword: transactionPassword,
         invitationCode: invitationCode,
       );
-      
+
       return await login(email, password);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: _handleError(e));
@@ -159,7 +181,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final apiService = ref.read(apiServiceProvider);
       await apiService.verifyEmail(state.userId!);
-      await _storage.write(key: 'emailVerified', value: 'true');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('emailVerified', true);
       state = state.copyWith(isEmailVerified: true);
     } catch (e) {
       state = state.copyWith(error: _handleError(e));
@@ -167,8 +190,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> logout() async {
-    await _storage.deleteAll();
-    state = AuthState();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('userId');
+    await prefs.remove('email');
+    await prefs.remove('role');
+    await prefs.remove('emailVerified');
+    state = AuthState(sessionRestored: true);
   }
 }
 
