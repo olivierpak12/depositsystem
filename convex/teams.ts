@@ -16,26 +16,26 @@ export const processDepositRewards = mutation({
   handler: async (ctx, args) => {
     const referralLinks = await ctx.db
       .query("referralTree")
-      .withIndex("by_referred", (q) => q.eq("referredId", args.userId))
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
       .collect();
 
     const depositAmount = BigInt(args.amount);
 
     for (const link of referralLinks) {
-      const percentage = TIER_PERCENTAGES[link.tier];
+      const percentage = TIER_PERCENTAGES[link.level];
       if (!percentage) continue;
 
       const rewardAmount = (depositAmount * BigInt(percentage)) / BigInt(100);
 
       if (rewardAmount <= BigInt(0)) continue;
 
-      const referrer = await ctx.db.get(link.referrerId);
+      const referrer = await ctx.db.get(link.parentId);
       if (!referrer) continue;
 
       const currentBalance = BigInt(referrer.teamRewardsBalance ?? "0");
       const currentTotalEarned = BigInt(referrer.teamRewardsTotalEarned ?? "0");
 
-      await ctx.db.patch(link.referrerId, {
+      await ctx.db.patch(link.parentId, {
         teamRewardsBalance: (currentBalance + rewardAmount).toString(),
         teamRewardsTotalEarned: (currentTotalEarned + rewardAmount).toString(),
       });
@@ -85,24 +85,21 @@ export const getTeamStats = query({
 
     const tier1Links = await ctx.db
       .query("referralTree")
-      .withIndex("by_referrer", (q) => q.eq("referrerId", args.userId))
-      .filter((q) => q.eq(q.field("tier"), 1))
+      .withIndex("by_parentId_level", (q) => q.eq("parentId", args.userId).eq("level", 1))
       .collect();
 
     const tier2Links = await ctx.db
       .query("referralTree")
-      .withIndex("by_referrer", (q) => q.eq("referrerId", args.userId))
-      .filter((q) => q.eq(q.field("tier"), 2))
+      .withIndex("by_parentId_level", (q) => q.eq("parentId", args.userId).eq("level", 2))
       .collect();
 
     const tier3Links = await ctx.db
       .query("referralTree")
-      .withIndex("by_referrer", (q) => q.eq("referrerId", args.userId))
-      .filter((q) => q.eq(q.field("tier"), 3))
+      .withIndex("by_parentId_level", (q) => q.eq("parentId", args.userId).eq("level", 3))
       .collect();
 
     async function getTeamStatsForLinks(links: typeof tier1Links, tier: number) {
-      const memberIds = links.map((l) => l.referredId);
+      const memberIds = links.map((l) => l.userId);
       const newMembersInPeriod = links.filter((l) => l.createdAt >= periodStart && l.createdAt <= periodEnd).length;
 
       let periodRechargeAmount = BigInt(0);
@@ -134,9 +131,9 @@ export const getTeamStats = query({
 
     // Summary calculations
     const allMemberIds = [
-      ...tier1Links.map((l) => l.referredId),
-      ...tier2Links.map((l) => l.referredId),
-      ...tier3Links.map((l) => l.referredId),
+      ...tier1Links.map((l) => l.userId),
+      ...tier2Links.map((l) => l.userId),
+      ...tier3Links.map((l) => l.userId),
     ];
 
     const newMembersTodayStart = new Date(new Date(now).getFullYear(), new Date(now).getMonth(), new Date(now).getDate()).getTime();

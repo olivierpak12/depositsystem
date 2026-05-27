@@ -46,12 +46,30 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: '/login', builder: (context, state) => const AuthScreen()),
       GoRoute(path: '/verify-email', builder: (context, state) => const VerifyEmailScreen()),
-      GoRoute(path: '/', builder: (context, state) => const DashboardScreen()),
-      GoRoute(path: '/deposit', builder: (context, state) => const DepositScreen()),
-      GoRoute(path: '/withdraw', builder: (context, state) => const WithdrawScreen()),
-      GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen()),
-      GoRoute(path: '/admin', builder: (context, state) => const AdminDashboardScreen()),
-      GoRoute(path: '/admin/users', builder: (context, state) => const UserManagementScreen()),
+      GoRoute(path: '/forgot-password', builder: (context, state) => const ForgotPasswordScreen()),
+      GoRoute(path: '/reset-password', builder: (context, state) {
+        final token = state.uri.queryParameters['token'] ?? '';
+        return ResetPasswordScreen(token: token);
+      }),
+      GoRoute(path: '/reset-transaction-password', builder: (context, state) {
+        final token = state.uri.queryParameters['token'] ?? '';
+        return ResetTransactionPasswordScreen(token: token);
+      }),
+      ShellRoute(
+        builder: (context, state, child) => MainShell(child: child),
+        routes: [
+          GoRoute(path: '/', builder: (context, state) => const DashboardScreen()),
+          GoRoute(path: '/level', builder: (context, state) => const LevelScreen()),
+          GoRoute(path: '/bike', builder: (context, state) => const BikeScreen()),
+          GoRoute(path: '/team', builder: (context, state) => const TeamScreen()),
+          GoRoute(path: '/my', builder: (context, state) => const SettingsScreen()),
+          GoRoute(path: '/deposit', builder: (context, state) => const DepositScreen()),
+          GoRoute(path: '/withdraw', builder: (context, state) => const WithdrawScreen()),
+          GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen()),
+          GoRoute(path: '/admin', builder: (context, state) => const AdminDashboardScreen()),
+          GoRoute(path: '/admin/users', builder: (context, state) => const UserManagementScreen()),
+        ],
+      ),
     ],
     redirect: (context, state) {
       final auth = ref.read(authProvider);
@@ -1496,11 +1514,13 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_initialized) {
-        final queryCode = GoRouterState.of(context).uri.queryParameters['invitationCode'] ?? '';
-        if (queryCode.isNotEmpty) {
-          _inviteCtrl.text = queryCode;
-          setState(() => _isLogin = false);
-        }
+        try {
+          final queryCode = GoRouterState.of(context).uri.queryParameters['invitationCode'] ?? '';
+          if (queryCode.isNotEmpty) {
+            _inviteCtrl.text = queryCode;
+            setState(() => _isLogin = false);
+          }
+        } catch (_) {}
         _initialized = true;
       }
     });
@@ -3755,39 +3775,47 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           )
         ],
       ),
-      body: ListView(
-        children: [
-          _buildSettingsTile(Icons.person_outline, 'Profile', auth.email ?? 'Not logged in'),
-          _buildSettingsTile(
-            Icons.security, 
-            'Security & Role', 
-            'Current Role: ${auth.role?.toUpperCase() ?? "USER"}',
-            trailing: auth.isAdmin ? Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(color: Colors.greenAccent, borderRadius: BorderRadius.circular(5)),
-              child: const Text('ADMIN', style: TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold)),
-            ) : null,
-          ),
-          if (auth.isAdmin)
-            _buildSettingsTile(Icons.admin_panel_settings_outlined, 'Admin Dashboard', 'Manage users and system', 
-                onTap: () => context.push('/admin')),
-          const Divider(height: 40, color: Colors.white10),
-          _buildSettingsTile(Icons.logout, 'Log Out', null, color: Colors.redAccent, onTap: () {
-            ref.read(authProvider.notifier).logout();
-            context.go('/login');
-          }),
-        ],
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            _buildProfileHeader(initials, email, auth.role ?? 'user', auth.isAdmin),
+            const SizedBox(height: 24),
+            _buildBalanceCard(rewardsBalance),
+            const SizedBox(height: 20),
+            _buildInviteCard(),
+            const SizedBox(height: 20),
+            _buildActionCard(
+              icon: Icons.lock_reset,
+              title: 'Reset Transaction Password',
+              subtitle: 'Send a reset link to your email',
+              color: Colors.orangeAccent,
+              onTap: _requestTransactionPasswordReset,
+            ),
+            if (auth.isAdmin) ...[
+              const SizedBox(height: 20),
+              _buildActionCard(
+                icon: Icons.admin_panel_settings_outlined,
+                title: 'Admin Dashboard',
+                subtitle: 'Manage users and system',
+                color: Colors.greenAccent,
+                onTap: () => context.push('/admin'),
+              ),
+            ],
+            const SizedBox(height: 20),
+            _buildActionCard(
+              icon: Icons.logout,
+              title: 'Log Out',
+              subtitle: null,
+              color: Colors.redAccent,
+              onTap: () {
+                ref.read(authProvider.notifier).logout();
+                context.go('/login');
+              },
+            ),
+          ],
+        ),
       ),
-    );
-  }
-
-  Widget _buildSettingsTile(IconData icon, String title, String? subtitle, {Color? color, VoidCallback? onTap, Widget? trailing}) {
-    return ListTile(
-      leading: Icon(icon, color: color ?? Colors.greenAccent),
-      title: Text(title, style: TextStyle(color: color, fontWeight: FontWeight.bold)),
-      subtitle: subtitle != null ? Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.white54)) : null,
-      trailing: trailing ?? (onTap != null ? const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white24) : null),
-      onTap: onTap,
     );
   }
 
