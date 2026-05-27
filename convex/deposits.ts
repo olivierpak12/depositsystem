@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { Id } from "./_generated/dataModel";
 
 export const listDeposits = query({
   args: { userId: v.id("users") },
@@ -8,6 +9,16 @@ export const listDeposits = query({
       .query("deposits")
       .withIndex("by_userId", (q) => q.eq("userId", args.userId))
       .order("desc")
+      .collect();
+  },
+});
+
+export const listAllConfirmed = query({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db
+      .query("deposits")
+      .filter((q) => q.eq(q.field("status"), "confirmed"))
       .collect();
   },
 });
@@ -53,9 +64,6 @@ export const updateStatus = mutation({
     const deposit = await ctx.db.get(args.depositId);
     if (!deposit) return;
 
-    // CRITICAL IDEMPOTENCY GUARD:
-    // If the caller wants to set it to 'confirmed', but it's already confirmed or swept,
-    // do absolutely nothing. This prevents duplicate balance additions.
     if (args.status === "confirmed" && (deposit.status === "confirmed" || deposit.status === "swept")) {
       return;
     }
@@ -63,7 +71,6 @@ export const updateStatus = mutation({
     const { depositId, ...patch } = args;
     await ctx.db.patch(depositId, patch);
 
-    // Only update balance when first moving to 'confirmed'
     if (args.status === "confirmed" && deposit.status === "pending") {
       const balance = await ctx.db
         .query("balances")
@@ -84,9 +91,60 @@ export const updateStatus = mutation({
           updatedAt: Date.now(),
         });
       }
+
+      // DISTRIBUTE COMMISSIONS
+      await distributeCommissionsInternal(ctx, args.depositId);
     }
   },
 });
+
+async function distributeCommissionsInternal(ctx: any, depositId: Id<"deposits">) {
+  const deposit = await ctx.db.get(depositId);
+  if (!deposit) return;
+
+  const user = await ctx.db.get(deposit.userId);
+  if (!user || !user.referredBy) return;
+
+  const depositAmount = parseFloat(deposit.amount) / 1000000;
+
+  // Level 1: 18%
+  await processCommission(ctx, user.referredBy, user._id, 1, 18, depositAmount, depositId);
+
+  // Level 2: 3%
+  const level1Parent = await ctx.db.get(user.referredBy);
+  if (level1Parent?.referredBy) {
+    await processCommission(ctx, level1Parent.referredBy, user._id, 2, 3, depositAmount, depositId);
+    
+    // Level 3: 2%
+    const level2Parent = await ctx.db.get(level1Parent.referredBy);
+    if (level2Parent?.referredBy) {
+      await processCommission(ctx, level2Parent.referredBy, user._id, 3, 2, depositAmount, depositId);
+    }
+  }
+}
+
+async function processCommission(ctx: any, toUserId: Id<"users">, fromUserId: Id<"users">, level: number, percent: number, depositAmount: number, depositId: Id<"deposits">) {
+  const commissionAmount = (depositAmount * percent) / 100;
+  
+  await ctx.db.insert("referralCommissions", {
+    fromUserId,
+    toUserId,
+    level,
+    percent,
+    depositAmount,
+    commissionAmount,
+    depositId,
+    createdAt: Date.now()
+  });
+
+  const recipient = await ctx.db.get(toUserId);
+  if (recipient) {
+    await ctx.db.patch(toUserId, {
+      referralBalance: (recipient.referralBalance || 0) + commissionAmount,
+      totalReferralEarnings: (recipient.totalReferralEarnings || 0) + commissionAmount
+    });
+  }
+}
 
 export const getDeposit = query({
   args: { depositId: v.id("deposits") },
@@ -99,15 +157,5 @@ export const listDepositsRaw = query({
   args: {},
   handler: async (ctx) => {
     return await ctx.db.query("deposits").collect();
-  },
-});
-
-export const listAllConfirmed = query({
-  args: {},
-  handler: async (ctx) => {
-    return await ctx.db
-      .query("deposits")
-      .filter((q) => q.eq(q.field("status"), "confirmed"))
-      .collect();
   },
 });

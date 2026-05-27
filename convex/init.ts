@@ -4,6 +4,30 @@ export const initializeNetworks = mutation({
   handler: async (ctx) => {
     const networks = [
       {
+        chainId: 1,
+        name: "Ethereum Mainnet",
+        rpcUrl: "ETH_MAINNET_RPC",
+        defaultRpc: "https://eth.llamarpc.com",
+        usdtContractEnv: "ETH_MAINNET_USDT",
+        usdtContract: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+        usdcContractEnv: "ETH_MAINNET_USDC",
+        usdcContract: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        symbol: "ETH",
+        isActive: true,
+      },
+      {
+        chainId: 137,
+        name: "Polygon Mainnet",
+        rpcUrl: "POLYGON_MAINNET_RPC",
+        defaultRpc: "https://polygon-rpc.com",
+        usdtContractEnv: "POLYGON_MAINNET_USDT",
+        usdtContract: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
+        usdcContractEnv: "POLYGON_MAINNET_USDC",
+        usdcContract: "0x3c499c512c03178468b2074E05174094002669f1",
+        symbol: "MATIC",
+        isActive: true,
+      },
+      {
         chainId: 11155111,
         name: "Ethereum Sepolia",
         rpcUrl: "ETH_SEPOLIA_RPC",
@@ -63,7 +87,6 @@ export const initializeNetworks = mutation({
       }
     }
 
-    // Optionally deactivate networks that are no longer in the list
     const allStored = await ctx.db.query("supported_networks").collect();
     for (const stored of allStored) {
       if (!networks.find(n => n.chainId === stored.chainId)) {

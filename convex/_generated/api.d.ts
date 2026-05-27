@@ -9,17 +9,20 @@
  */
 
 import type * as admin from "../admin.js";
+import type * as adminActions from "../adminActions.js";
 import type * as balances from "../balances.js";
 import type * as deposits from "../deposits.js";
 import type * as etherscanActions from "../etherscanActions.js";
 import type * as http from "../http.js";
 import type * as init from "../init.js";
 import type * as networks from "../networks.js";
+import type * as referrals from "../referrals.js";
 import type * as sweepActions from "../sweepActions.js";
 import type * as sweep_transactions from "../sweep_transactions.js";
 import type * as users from "../users.js";
 import type * as walletActions from "../walletActions.js";
 import type * as wallets from "../wallets.js";
+import type * as withdrawalActions from "../withdrawalActions.js";
 import type * as withdrawals from "../withdrawals.js";
 
 import type {
@@ -30,17 +33,20 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
+  adminActions: typeof adminActions;
   balances: typeof balances;
   deposits: typeof deposits;
   etherscanActions: typeof etherscanActions;
   http: typeof http;
   init: typeof init;
   networks: typeof networks;
+  referrals: typeof referrals;
   sweepActions: typeof sweepActions;
   sweep_transactions: typeof sweep_transactions;
   users: typeof users;
   walletActions: typeof walletActions;
   wallets: typeof wallets;
+  withdrawalActions: typeof withdrawalActions;
   withdrawals: typeof withdrawals;
 }>;
 

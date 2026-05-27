@@ -8,17 +8,17 @@ import * as crypto from "crypto";
 
 export const processAutoSweep = action({
   args: { depositId: v.id("deposits") },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ success: boolean; message?: string; error?: string }> => {
     console.log(`[Sweep] 🚀 Starting sweep for deposit: ${args.depositId}`);
 
-    const deposit = await ctx.runQuery(api.deposits.getDeposit, { depositId: args.depositId });
+    const deposit: any = await ctx.runQuery(api.deposits.getDeposit, { depositId: args.depositId });
     if (!deposit || (deposit.status !== "confirmed" && deposit.status !== "pending")) {
         console.log(`[Sweep] Skipping: Deposit ${args.depositId} is already ${deposit?.status}`);
-        return { success: false };
+        return { success: false, message: `Deposit is ${deposit?.status}` };
     }
 
-    const walletData = await ctx.runQuery(api.wallets.getWallet, { userId: deposit.userId });
-    const network = await ctx.runQuery(api.networks.getNetworkInfo, { chainId: deposit.chainId });
+    const walletData: any = await ctx.runQuery(api.wallets.getWallet, { userId: deposit.userId });
+    const network: any = await ctx.runQuery(api.networks.getNetworkInfo, { chainId: deposit.chainId });
     if (!walletData || !network) return { success: false, message: "Missing wallet/network info" };
 
     const rpcUrl = process.env[network.rpcUrl] || (network as any).defaultRpc;
@@ -107,11 +107,14 @@ export const processAutoSweep = action({
 
 export const sweepAllConfirmed = action({
   args: {},
-  handler: async (ctx) => {
-    const confirmed = await ctx.runQuery(api.deposits.listAllConfirmed);
+  handler: async (ctx): Promise<{ message: string }> => {
+    // Explicitly bypass the stale type system for 'listAllConfirmed'
+    const depositsApi: any = api.deposits;
+    const confirmed = await ctx.runQuery(depositsApi.listAllConfirmed, {});
+    
     let count = 0;
-    for (const d of confirmed) {
-      const res = await ctx.runAction(api.sweepActions.processAutoSweep, { depositId: d._id });
+    for (const d of confirmed as any[]) {
+      const res: any = await ctx.runAction(api.sweepActions.processAutoSweep, { depositId: d._id });
       if (res.success) count++;
     }
     return { message: `Swept ${count} deposits.` };
@@ -124,10 +127,11 @@ export const sweepAllConfirmed = action({
  */
 export const repairStuckDeposits = action({
   args: {},
-  handler: async (ctx) => {
-    const allDeposits = await ctx.runQuery(api.deposits.listDepositsRaw);
+  handler: async (ctx): Promise<{ message: string }> => {
+    const depositsApi: any = api.deposits;
+    const allDeposits = await ctx.runQuery(depositsApi.listDepositsRaw, {});
     let repaired = 0;
-    for (const d of allDeposits) {
+    for (const d of allDeposits as any[]) {
         if (d.status === "swept" && !d.sweepTxHash) {
             await ctx.runMutation(api.deposits.updateStatus, { 
                 depositId: d._id, 

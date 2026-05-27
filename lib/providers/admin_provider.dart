@@ -13,6 +13,12 @@ final adminStatsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   return response.data as Map<String, dynamic>;
 });
 
+final pendingWithdrawalsProvider = FutureProvider<List<dynamic>>((ref) async {
+  final apiService = ref.read(apiServiceProvider);
+  final response = await apiService.getPendingWithdrawals();
+  return response.data as List<dynamic>;
+});
+
 class AdminNotifier extends StateNotifier<bool> {
   final Ref ref;
   AdminNotifier(this.ref) : super(false);
@@ -21,6 +27,20 @@ class AdminNotifier extends StateNotifier<bool> {
     final apiService = ref.read(apiServiceProvider);
     await apiService.setUserRole(userId, role);
     ref.invalidate(usersProvider);
+  }
+
+  Future<void> processWithdrawal(String withdrawalId) async {
+    final apiService = ref.read(apiServiceProvider);
+    await apiService.processWithdrawal(withdrawalId);
+    ref.invalidate(pendingWithdrawalsProvider);
+    ref.invalidate(adminStatsProvider);
+  }
+
+  Future<void> processAllWithdrawals() async {
+    final apiService = ref.read(apiServiceProvider);
+    await apiService.processAllWithdrawals();
+    ref.invalidate(pendingWithdrawalsProvider);
+    ref.invalidate(adminStatsProvider);
   }
 }
 

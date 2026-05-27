@@ -10,6 +10,26 @@ const convex = new ConvexHttpClient(process.env.CONVEX_URL!);
 
 const NETWORKS = [
   {
+    name: "Ethereum Mainnet",
+    chainId: 1,
+    rpc: process.env.ETH_MAINNET_RPC!,
+    tokens: [
+      { symbol: "USDT", address: process.env.ETH_MAINNET_USDT!, decimals: 6 },
+      { symbol: "USDC", address: process.env.ETH_MAINNET_USDC!, decimals: 6 }
+    ],
+    nativeSymbol: "ETH"
+  },
+  {
+    name: "Polygon Mainnet",
+    chainId: 137,
+    rpc: process.env.POLYGON_MAINNET_RPC!,
+    tokens: [
+      { symbol: "USDT", address: process.env.POLYGON_MAINNET_USDT!, decimals: 6 },
+      { symbol: "USDC", address: process.env.POLYGON_MAINNET_USDC!, decimals: 6 }
+    ],
+    nativeSymbol: "MATIC"
+  },
+  {
     name: "Ethereum Sepolia",
     chainId: 11155111,
     rpc: process.env.ETH_SEPOLIA_RPC!,
@@ -53,12 +73,19 @@ export async function startListeners() {
   console.log("--- CryptoVault Multi-Token Listener Started ---");
   
   for (const network of NETWORKS) {
-    if (!network.rpc) continue;
+    if (!network.rpc) {
+        console.warn(`Skipping ${network.name}: RPC URL not configured.`);
+        continue;
+    }
 
     try {
       const provider = new ethers.JsonRpcProvider(network.rpc);
       
       for (const token of network.tokens) {
+        if (!token.address) {
+            console.warn(`Skipping ${token.symbol} on ${network.name}: Contract address not configured.`);
+            continue;
+        }
         const contract = new ethers.Contract(token.address, ERC20_ABI, provider);
         console.log(`Monitoring ${token.symbol} on ${network.name}...`);
 

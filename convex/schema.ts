@@ -3,15 +3,27 @@ import { v } from "convex/values";
 
 export default defineSchema({
   users: defineTable({
+    username: v.optional(v.string()),
     email: v.string(),
     password: v.string(),
     transactionPassword: v.string(),
-    invitationCode: v.string(),
+    referralCode: v.optional(v.string()), 
+    referralLink: v.optional(v.string()),
+    referredBy: v.optional(v.id("users")),
+    referralBalance: v.optional(v.number()), 
+    totalReferralEarnings: v.optional(v.number()), 
+    teamSize: v.optional(v.number()), 
     role: v.optional(v.union(v.literal("user"), v.literal("admin"))),
     emailVerified: v.boolean(),
     externalId: v.optional(v.string()), 
     createdAt: v.number(),
-  }).index("by_email", ["email"]).index("by_externalId", ["externalId"]),
+    invitationCode: v.optional(v.string()), 
+  })
+    .index("by_email", ["email"])
+    .index("by_externalId", ["externalId"])
+    .index("by_referralCode", ["referralCode"])
+    .index("by_referredBy", ["referredBy"])
+    .index("by_totalReferralEarnings", ["totalReferralEarnings"]),
 
   wallets: defineTable({
     userId: v.id("users"),
@@ -54,8 +66,34 @@ export default defineSchema({
     amount: v.string(),
     token: v.string(),
     status: v.union(v.literal("pending"), v.literal("processing"), v.literal("completed"), v.literal("failed")),
+    error: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_userId", ["userId"]),
+
+  referralCommissions: defineTable({
+    fromUserId: v.id("users"),
+    toUserId: v.id("users"),
+    level: v.number(),
+    percent: v.number(),
+    depositAmount: v.number(),
+    commissionAmount: v.number(),
+    depositId: v.id("deposits"),
+    createdAt: v.number(),
+  })
+    .index("by_toUserId", ["toUserId"])
+    .index("by_fromUserId", ["fromUserId"])
+    .index("by_depositId", ["depositId"])
+    .index("by_toUserId_createdAt", ["toUserId", "createdAt"]),
+
+  referralTree: defineTable({
+    userId: v.id("users"),
+    parentId: v.id("users"),
+    level: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_parentId", ["parentId"])
+    .index("by_parentId_level", ["parentId", "level"]),
 
   sweep_transactions: defineTable({
     depositId: v.id("deposits"),

@@ -6,7 +6,6 @@ final balanceProvider = FutureProvider.family<String, String>((ref, userId) asyn
   final apiService = ref.read(apiServiceProvider);
   try {
     final response = await apiService.getBalance(userId);
-    // Extract 'balance' field from {"balance": "..."}
     if (response.data is Map && response.data['balance'] != null) {
       return response.data['balance'].toString();
     }
@@ -19,31 +18,29 @@ final balanceProvider = FutureProvider.family<String, String>((ref, userId) asyn
 
 final walletProvider = FutureProvider.family<Map<String, dynamic>?, String>((ref, userId) async {
   if (userId.isEmpty) throw Exception("User not logged in");
-  
   final apiService = ref.read(apiServiceProvider);
-  
-  // 1. Try to get existing wallet
   try {
     final response = await apiService.getWallet(userId);
-    if (response.data != null && response.data['address'] != null) {
+    if (response.data != null && response.data is Map && response.data['address'] != null) {
       return response.data;
     }
   } catch (e) {
     print("Error fetching wallet: $e");
   }
-
-  // 2. If no wallet exists, generate one
   try {
     final genResponse = await apiService.generateWallet(userId);
-    if (genResponse.data != null && genResponse.data['address'] != null) {
+    if (genResponse.data != null && genResponse.data is Map && genResponse.data['address'] != null) {
       return genResponse.data;
     }
     throw Exception("Generation returned empty data");
   } catch (e) {
-    final retryResponse = await apiService.getWallet(userId);
-    if (retryResponse.data != null && retryResponse.data['address'] != null) {
-      return retryResponse.data;
-    }
+    print("Error generating wallet: $e");
+    try {
+      final retryResponse = await apiService.getWallet(userId);
+      if (retryResponse.data != null && retryResponse.data is Map && retryResponse.data['address'] != null) {
+        return retryResponse.data;
+      }
+    } catch (_) {}
     throw Exception("Failed to generate wallet: $e");
   }
 });
@@ -51,22 +48,72 @@ final walletProvider = FutureProvider.family<Map<String, dynamic>?, String>((ref
 final transactionsProvider = FutureProvider.family<List<dynamic>, String>((ref, userId) async {
   if (userId.isEmpty) return [];
   final apiService = ref.read(apiServiceProvider);
-  
-  // Trigger a sync from Etherscan before returning local transactions
   try {
-    await apiService.syncDeposits(userId);
+    final syncRes = await apiService.syncDeposits(userId).timeout(const Duration(seconds: 15));
+    // If new deposits were found and confirmed, invalidate the balance to show the update
+    if (syncRes.data is Map && syncRes.data['foundNew'] != null && (syncRes.data['foundNew'] as int) > 0) {
+      ref.invalidate(balanceProvider(userId));
+    }
   } catch (e) {
-    print("Sync failed: $e");
+    print("Background sync skipped: $e");
   }
 
-  final response = await apiService.getTransactions(userId);
-  return response.data as List<dynamic>;
+  try {
+    final response = await apiService.getTransactions(userId);
+    return (response.data is List) ? response.data as List<dynamic> : [];
+  } catch (e) {
+    print("Error fetching transactions: $e");
+    return [];
+  }
 });
 
-// Provider to manually trigger sync
+final withdrawalsProvider = FutureProvider.family<List<dynamic>, String>((ref, userId) async {
+  if (userId.isEmpty) return [];
+  final apiService = ref.read(apiServiceProvider);
+  try {
+    final response = await apiService.getWithdrawals(userId);
+    return (response.data is List) ? response.data as List<dynamic> : [];
+  } catch (e) {
+    print("Error fetching withdrawals: $e");
+    return [];
+  }
+});
+
+// Combined provider for "Activity"
+final activityProvider = FutureProvider.family<List<dynamic>, String>((ref, userId) async {
+  final txs = await ref.watch(transactionsProvider(userId).future);
+  final withdrawals = await ref.watch(withdrawalsProvider(userId).future);
+  
+  // Tag them to distinguish
+  final formattedTxs = txs.map((e) => {...e, 'type': 'deposit'}).toList();
+  final formattedWithdrawals = withdrawals.map((e) => {...e, 'type': 'withdrawal'}).toList();
+  
+  final combined = [...formattedTxs, ...formattedWithdrawals];
+  // Sort by createdAt / timestamp desc
+  combined.sort((a, b) {
+    final timeA = a['createdAt'] ?? a['timestamp'] ?? 0;
+    final timeB = b['createdAt'] ?? b['timestamp'] ?? 0;
+    return timeB.compareTo(timeA);
+  });
+  
+  return combined;
+});
+
 final syncProvider = FutureProvider.family<int, String>((ref, userId) async {
   if (userId.isEmpty) return 0;
   final apiService = ref.read(apiServiceProvider);
-  final response = await apiService.syncDeposits(userId);
-  return response.data['foundNew'] ?? 0;
+  try {
+    final response = await apiService.syncDeposits(userId);
+    if (response.data is Map && response.data['foundNew'] != null) {
+      final found = response.data['foundNew'] as int;
+      if (found > 0) {
+        ref.invalidate(balanceProvider(userId));
+      }
+      return found;
+    }
+    return 0;
+  } catch (e) {
+    print("Manual sync failed: $e");
+    return 0;
+  }
 });
