@@ -2909,8 +2909,9 @@ class _ResetTransactionPasswordScreenState extends ConsumerState<ResetTransactio
 }
 
 // --- Welcome Modal ---
-const String telegramGroupUrl = 'https://t.me/your_group_link';
-const String contactAssistantUrl = 'https://t.me/your_assistant_contact';
+const String telegramGroupUrl = 'https://t.me/+GQf04WTt82o4ZmI8';
+const String telegramChannelUrl = 'https://t.me/+IUXpCCZDOA8yMDM0';
+const String contactAssistantUrl = 'https://t.me/Lssc1support';
 
 void _showWelcomeModal(BuildContext context, String? email) {
   final userName = email != null ? email.split('@').first : 'Valued User';
@@ -3066,6 +3067,81 @@ void _showWelcomeModal(BuildContext context, String? email) {
                         ),
                         child: Text(
                           'Join',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // --- Telegram Channel ---
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    color: const Color(0xFF0088CC).withValues(alpha: 0.08),
+                    border: Border.all(
+                      color: const Color(0xFF0088CC).withValues(alpha: 0.25),
+                    ),
+                  ),
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0088CC).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.telegram,
+                          color: Color(0xFF0088CC),
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'View Our Telegram Channel',
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Follow announcements and news updates',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: Colors.grey[500],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          final url = Uri.parse(telegramChannelUrl);
+                          if (await canLaunchUrl(url)) {
+                            await launchUrl(url, mode: LaunchMode.externalApplication);
+                          }
+                        },
+                        style: TextButton.styleFrom(
+                          backgroundColor: const Color(0xFF0088CC),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: Text(
+                          'View',
                           style: GoogleFonts.poppins(
                             fontWeight: FontWeight.w700,
                             fontSize: 13,
