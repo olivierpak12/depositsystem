@@ -8,7 +8,9 @@ dotenv.config();
 
 const convex = new ConvexHttpClient(process.env.CONVEX_URL!);
 
-const NETWORKS = [
+const USE_MAINNET = process.env.USE_MAINNET === "true";
+
+const ALL_NETWORKS = [
   {
     name: "Ethereum Mainnet",
     chainId: 1,
@@ -17,7 +19,8 @@ const NETWORKS = [
       { symbol: "USDT", address: process.env.ETH_MAINNET_USDT!, decimals: 6 },
       { symbol: "USDC", address: process.env.ETH_MAINNET_USDC!, decimals: 6 }
     ],
-    nativeSymbol: "ETH"
+    nativeSymbol: "ETH",
+    isMainnet: true,
   },
   {
     name: "Polygon Mainnet",
@@ -27,7 +30,8 @@ const NETWORKS = [
       { symbol: "USDT", address: process.env.POLYGON_MAINNET_USDT!, decimals: 6 },
       { symbol: "USDC", address: process.env.POLYGON_MAINNET_USDC!, decimals: 6 }
     ],
-    nativeSymbol: "MATIC"
+    nativeSymbol: "MATIC",
+    isMainnet: true,
   },
   {
     name: "Ethereum Sepolia",
@@ -37,7 +41,8 @@ const NETWORKS = [
       { symbol: "USDT", address: process.env.ETH_SEPOLIA_USDT!, decimals: 6 },
       { symbol: "USDC", address: process.env.ETH_SEPOLIA_USDC!, decimals: 6 }
     ],
-    nativeSymbol: "ETH"
+    nativeSymbol: "ETH",
+    isMainnet: false,
   },
   {
     name: "Polygon Amoy",
@@ -47,7 +52,8 @@ const NETWORKS = [
       { symbol: "USDT", address: process.env.POLYGON_AMOY_USDT!, decimals: 6 },
       { symbol: "USDC", address: process.env.POLYGON_AMOY_USDC!, decimals: 6 }
     ],
-    nativeSymbol: "MATIC"
+    nativeSymbol: "MATIC",
+    isMainnet: false,
   },
   {
     name: "BSC Testnet",
@@ -57,9 +63,12 @@ const NETWORKS = [
       { symbol: "USDT", address: process.env.BSC_TESTNET_USDT!, decimals: 18 },
       { symbol: "USDC", address: process.env.BSC_TESTNET_USDC!, decimals: 18 }
     ],
-    nativeSymbol: "BNB"
+    nativeSymbol: "BNB",
+    isMainnet: false,
   }
 ];
+
+const NETWORKS = ALL_NETWORKS.filter(n => USE_MAINNET ? n.isMainnet : !n.isMainnet);
 
 const ERC20_ABI = [
   "event Transfer(address indexed from, address indexed to, uint256 value)",

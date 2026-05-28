@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -2300,6 +2301,282 @@ class _ResetTransactionPasswordScreenState extends ConsumerState<ResetTransactio
   }
 }
 
+// --- Welcome Modal ---
+const String telegramGroupUrl = 'https://t.me/your_group_link';
+const String contactAssistantUrl = 'https://t.me/your_assistant_contact';
+
+void _showWelcomeModal(BuildContext context, String? email) {
+  final userName = email != null ? email.split('@').first : 'Valued User';
+  final hour = DateTime.now().hour;
+  String greeting;
+  IconData greetingIcon;
+  if (hour < 12) {
+    greeting = 'Good Morning';
+    greetingIcon = Icons.wb_sunny_outlined;
+  } else if (hour < 17) {
+    greeting = 'Good Afternoon';
+    greetingIcon = Icons.wb_cloudy_outlined;
+  } else {
+    greeting = 'Good Evening';
+    greetingIcon = Icons.nightlight_round;
+  }
+
+  showDialog(
+    context: context,
+    barrierDismissible: true,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: const Color(0xFF1A1A1A),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(28),
+      ),
+      contentPadding: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // --- Header ---
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF1B5E20), Color(0xFF00C853)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: Column(
+              children: [
+                Icon(greetingIcon, size: 40, color: Colors.white),
+                const SizedBox(height: 12),
+                Text(
+                  greeting,
+                  style: GoogleFonts.poppins(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  userName,
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.white70,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // --- Body ---
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+            child: Column(
+              children: [
+                Text(
+                  'Welcome to CryptoVault Pro! 🚀',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Stay updated with the latest news, features, and community discussions.',
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    color: Colors.grey[400],
+                    height: 1.4,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+                // --- Telegram Section ---
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    color: const Color(0xFF0088CC).withValues(alpha: 0.1),
+                    border: Border.all(
+                      color: const Color(0xFF0088CC).withValues(alpha: 0.3),
+                    ),
+                  ),
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0088CC).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.telegram,
+                          color: Color(0xFF0088CC),
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Join Our Telegram',
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Get real-time updates & support',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: Colors.grey[500],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          final url = Uri.parse(telegramGroupUrl);
+                          if (await canLaunchUrl(url)) {
+                            await launchUrl(url, mode: LaunchMode.externalApplication);
+                          }
+                        },
+                        style: TextButton.styleFrom(
+                          backgroundColor: const Color(0xFF0088CC),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: Text(
+                          'Join',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // --- Contact Assistant ---
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    color: const Color(0xFF00C853).withValues(alpha: 0.08),
+                    border: Border.all(
+                      color: const Color(0xFF00C853).withValues(alpha: 0.25),
+                    ),
+                  ),
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF00C853).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.headset_mic_rounded,
+                          color: Color(0xFF00C853),
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Contact Assistant',
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'We\'re here to help 24/7',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: Colors.grey[500],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          final url = Uri.parse(contactAssistantUrl);
+                          if (await canLaunchUrl(url)) {
+                            await launchUrl(url, mode: LaunchMode.externalApplication);
+                          }
+                        },
+                        style: TextButton.styleFrom(
+                          backgroundColor: const Color(0xFF00C853),
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: Text(
+                          'Contact',
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // --- Footer Close ---
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Colors.white24),
+                  foregroundColor: Colors.white54,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: Text(
+                  'Close',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 // --- Dashboard ---
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -2309,10 +2586,27 @@ class DashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  bool _welcomeShown = false;
+
   @override
   void initState() {
     super.initState();
     Future.microtask(() => ref.read(authProvider.notifier).refreshUser());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_welcomeShown) return;
+    final auth = ref.read(authProvider);
+    if (auth.sessionRestored && auth.userId != null) {
+      _welcomeShown = true;
+      Future.delayed(const Duration(milliseconds: 600), () {
+        if (mounted) {
+          _showWelcomeModal(context, auth.email);
+        }
+      });
+    }
   }
 
   @override
@@ -2349,7 +2643,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 loading: () => _PortfolioCard(balance: "...", isLoading: true, isAdmin: auth.isAdmin),
                 error: (e, s) => _PortfolioCard(balance: "0.00", isAdmin: auth.isAdmin),
               ),
-              const SizedBox(height: 25),
+              const SizedBox(height: 20),
+              const _LiveActivityTicker(),
+              const SizedBox(height: 20),
               _AffiliatePromotionCard(onTap: () => context.push('/referrals')),
               const SizedBox(height: 25),
               Row(
@@ -2447,6 +2743,196 @@ class _PortfolioCard extends StatelessWidget {
       ),
     );
   }
+}
+
+// --- Live Activity Ticker ---
+class _LiveActivityTicker extends StatefulWidget {
+  const _LiveActivityTicker();
+
+  @override
+  State<_LiveActivityTicker> createState() => _LiveActivityTickerState();
+}
+
+class _LiveActivityTickerState extends State<_LiveActivityTicker>
+    with SingleTickerProviderStateMixin {
+  final List<_MockTx> _items = [];
+  final _scrollController = ScrollController();
+  late Timer _addTimer;
+  late AnimationController _animController;
+  final _random = Random();
+
+  static const _usernames = [
+    '0x7F3e…A2b1', '0x4D8a…C9f0', '0xE12b…B7d3',
+    '0x9A5c…F6e2', '0xB80d…D4a8', '0x3C2f…E1b9',
+    '0xK91g…H5c0', '0xM72h…J8d1', '0xP63i…L2e4',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    for (int i = 0; i < 10; i++) {
+      _items.add(_generateTx());
+    }
+
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 75),
+    )..addListener(_onTick);
+    _animController.repeat();
+
+    _addTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted) return;
+      setState(() {
+        _items.add(_generateTx());
+        if (_items.length > 25) _items.removeAt(0);
+      });
+    });
+  }
+
+  void _onTick() {
+    if (!_scrollController.hasClients) return;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    if (maxScroll <= 0) return;
+    final half = maxScroll / 2;
+    final pos = _animController.value * half;
+    if (_animController.value >= 0.99) {
+      _animController.reset();
+      _scrollController.jumpTo(0);
+    } else {
+      _scrollController.jumpTo(pos);
+    }
+  }
+
+  @override
+  void dispose() {
+    _addTimer.cancel();
+    _animController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  _MockTx _generateTx() {
+    final isDeposit = _random.nextBool();
+    final rawAmount = 50 + _random.nextDouble() * 4950;
+    final amount = double.parse(rawAmount.toStringAsFixed(2));
+    return _MockTx(
+      username: _usernames[_random.nextInt(_usernames.length)],
+      amount: amount,
+      isDeposit: isDeposit,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A2E),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: Colors.greenAccent,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Live Transactions',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${_items.length} txs',
+                style: const TextStyle(color: Colors.white38, fontSize: 10),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 36,
+            child: ListView.builder(
+              controller: _scrollController,
+              scrollDirection: Axis.horizontal,
+              itemCount: _items.length * 2,
+              itemBuilder: (context, index) {
+                final tx = _items[index % _items.length];
+                return _buildTxChip(tx);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTxChip(_MockTx tx) {
+    final isDep = tx.isDeposit;
+    return Container(
+      margin: const EdgeInsets.only(right: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: isDep
+            ? Colors.greenAccent.withValues(alpha: 0.08)
+            : Colors.orangeAccent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isDep
+              ? Colors.greenAccent.withValues(alpha: 0.15)
+              : Colors.orangeAccent.withValues(alpha: 0.15),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isDep ? Icons.arrow_downward : Icons.arrow_upward,
+            color: isDep ? Colors.greenAccent : Colors.orangeAccent,
+            size: 11,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            tx.username,
+            style: const TextStyle(color: Colors.white70, fontSize: 11),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '${isDep ? '+' : '-'}\$${tx.amount.toStringAsFixed(0)}',
+            style: TextStyle(
+              color: isDep ? Colors.greenAccent : Colors.orangeAccent,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MockTx {
+  final String username;
+  final double amount;
+  final bool isDeposit;
+  _MockTx({
+    required this.username,
+    required this.amount,
+    required this.isDeposit,
+  });
 }
 
 class _ActionTile extends StatelessWidget {
@@ -2919,29 +3405,40 @@ class DepositScreen extends ConsumerStatefulWidget {
 }
 
 class _DepositScreenState extends ConsumerState<DepositScreen> {
-  String selectedNetwork = 'Polygon Mainnet';
+  String selectedNetwork = '';
   String selectedToken = 'USDT';
   
-  final List<String> networks = ['Ethereum (ERC20)', 'Polygon Mainnet'];
   final List<String> tokens = ['USDT', 'USDC'];
+  List<dynamic> networks = [];
 
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final userId = auth.userId ?? "";
     final walletAsync = ref.watch(walletProvider(userId));
+    final networksAsync = ref.watch(networksProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('DEPOSIT ASSETS')),
-      body: walletAsync.when(
-        data: (wallet) {
-          if (wallet == null || wallet['address'] == null) {
-            return const Center(child: CircularProgressIndicator(color: Colors.greenAccent));
+      body: networksAsync.when(
+        data: (netList) {
+          networks = netList;
+          if (selectedNetwork.isEmpty && networks.isNotEmpty) {
+            selectedNetwork = networks[0]['name'] ?? '';
           }
-          return _buildBody(wallet['address']);
+          return walletAsync.when(
+            data: (wallet) {
+              if (wallet == null || wallet['address'] == null) {
+                return const Center(child: CircularProgressIndicator(color: Colors.greenAccent));
+              }
+              return _buildBody(wallet['address']);
+            },
+            loading: () => const Center(child: CircularProgressIndicator(color: Colors.greenAccent)),
+            error: (e, s) => Center(child: Text('Error: $e')),
+          );
         },
         loading: () => const Center(child: CircularProgressIndicator(color: Colors.greenAccent)),
-        error: (e, s) => Center(child: Text('Error: $e')),
+        error: (e, s) => Center(child: Text('Error loading networks: $e')),
       ),
     );
   }
@@ -2949,20 +3446,26 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
   Widget _buildBody(String address) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
-      child: Column(
-        children: [
-          _buildTokenDropdown(),
-          const SizedBox(height: 15),
-          _buildNetworkDropdown(),
-          const SizedBox(height: 40),
-          _buildQRCode(address),
-          const SizedBox(height: 40),
-          Text('Your Permanent $selectedToken Address', style: const TextStyle(color: Colors.white54, fontSize: 12)),
-          const SizedBox(height: 10),
-          _buildAddressDisplay(address),
-          const SizedBox(height: 50),
-          _buildSecurityNotice(),
-        ],
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildTokenDropdown(),
+              const SizedBox(height: 15),
+              _buildNetworkDropdown(),
+              const SizedBox(height: 40),
+              _buildQRCode(address),
+              const SizedBox(height: 40),
+              Text('Your Permanent $selectedToken Address', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+              const SizedBox(height: 10),
+              _buildAddressDisplay(address),
+              const SizedBox(height: 50),
+              _buildSecurityNotice(),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2982,6 +3485,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
   }
 
   Widget _buildNetworkDropdown() {
+    final netNames = networks.map((n) => n['name'] as String).toList();
     return DropdownButtonFormField<String>(
       initialValue: selectedNetwork,
       decoration: InputDecoration(
@@ -2990,7 +3494,7 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
         fillColor: const Color(0xFF1E1E1E),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
       ),
-      items: networks.map((n) => DropdownMenuItem(value: n, child: Text(n))).toList(),
+      items: netNames.map((n) => DropdownMenuItem(value: n, child: Text(n))).toList(),
       onChanged: (v) => setState(() => selectedNetwork = v!),
     );
   }
@@ -3052,16 +3556,12 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
   
   static const _storage = FlutterSecureStorage();
   
-  String selectedNetwork = 'Polygon Mainnet';
+  String selectedNetwork = '';
   String selectedToken = 'USDT';
   bool _isLoading = false;
   Timer? _refreshTimer;
+  List<dynamic> networks = [];
   
-  final Map<String, int> networkToChainId = {
-    'Ethereum (ERC20)': 1,
-    'Polygon Mainnet': 137,
-  };
-
   @override
   void initState() {
     super.initState();
@@ -3138,7 +3638,11 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
 
     try {
       final userId = ref.read(authProvider).userId!;
-      final chainId = networkToChainId[selectedNetwork] ?? 137;
+      final net = networks.cast<Map<String, dynamic>>().firstWhere(
+        (n) => n['name'] == selectedNetwork,
+        orElse: () => networks.isNotEmpty ? networks[0] : {'chainId': 137},
+      );
+      final chainId = net['chainId'] as int;
 
       await ref.read(apiServiceProvider).requestWithdrawal({
         'userId': userId,
@@ -3200,6 +3704,7 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
     final userId = auth.userId ?? "";
     final balanceAsync = ref.watch(balanceProvider(userId));
     final withdrawalsAsync = ref.watch(withdrawalsProvider(userId));
+    final networksAsync = ref.watch(networksProvider);
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F0F0F),
@@ -3208,9 +3713,12 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 500),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
             _buildSectionTitle('Network & Asset'),
             const SizedBox(height: 12),
             Container(
@@ -3228,7 +3736,19 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
                   _buildModernDropdown(
                     label: 'Target Network',
                     value: selectedNetwork,
-                    items: networkToChainId.keys.toList(),
+                    items: networksAsync.when(
+                      data: (netList) {
+                        networks = netList;
+                        if (selectedNetwork.isEmpty && networks.isNotEmpty) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) setState(() => selectedNetwork = networks[0]['name'] ?? '');
+                          });
+                        }
+                        return networks.map((n) => n['name'] as String).toList();
+                      },
+                      loading: () => <String>[],
+                      error: (_, __) => <String>[],
+                    ),
                     onChanged: (v) => setState(() => selectedNetwork = v!),
                   ),
                 ],
@@ -3301,7 +3821,9 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
               error: (e, s) => const Text('Failed to load history', style: TextStyle(color: Colors.white38)),
             ),
             const SizedBox(height: 30),
-          ],
+              ],
+            ),
+          ),
         ),
       ),
     );

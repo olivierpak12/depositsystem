@@ -22,10 +22,11 @@ export const syncUserDeposits = action({
     console.log(`[Sync] 🔎 Scanning address: ${walletAddress}`);
     let totalFound = 0;
 
+    const useMainnet = (process.env.USE_MAINNET || "false") === "true";
+
     for (const network of networks) {
       const chainId = (network as any).chainId || (network as any).chainid;
       const networkName = network.name;
-      const isTestnet = [11155111, 80002, 97].includes(chainId);
 
       try {
         console.log(`[Sync] 🌐 Network: ${networkName} (ChainID: ${chainId})`);

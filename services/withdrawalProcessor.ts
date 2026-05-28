@@ -12,14 +12,17 @@ if (!process.env.CONVEX_URL) {
 
 const convex = new ConvexHttpClient(process.env.CONVEX_URL!);
 
-const NETWORKS: any = {
+const USE_MAINNET = process.env.USE_MAINNET === "true";
+
+const ALL_NETWORKS: any = {
   1: {
     name: "Ethereum Mainnet",
     rpc: process.env.ETH_MAINNET_RPC,
     tokens: {
       USDT: process.env.ETH_MAINNET_USDT,
       USDC: process.env.ETH_MAINNET_USDC
-    }
+    },
+    isMainnet: true,
   },
   137: {
     name: "Polygon Mainnet",
@@ -27,7 +30,8 @@ const NETWORKS: any = {
     tokens: {
       USDT: process.env.POLYGON_MAINNET_USDT,
       USDC: process.env.POLYGON_MAINNET_USDC
-    }
+    },
+    isMainnet: true,
   },
   11155111: {
     name: "Ethereum Sepolia",
@@ -35,7 +39,8 @@ const NETWORKS: any = {
     tokens: {
       USDT: process.env.ETH_SEPOLIA_USDT,
       USDC: process.env.ETH_SEPOLIA_USDC
-    }
+    },
+    isMainnet: false,
   },
   80002: {
     name: "Polygon Amoy",
@@ -43,7 +48,8 @@ const NETWORKS: any = {
     tokens: {
       USDT: process.env.POLYGON_AMOY_USDT,
       USDC: process.env.POLYGON_AMOY_USDC
-    }
+    },
+    isMainnet: false,
   },
   97: {
     name: "BSC Testnet",
@@ -51,9 +57,18 @@ const NETWORKS: any = {
     tokens: {
       USDT: process.env.BSC_TESTNET_USDT,
       USDC: process.env.BSC_TESTNET_USDC
-    }
+    },
+    isMainnet: false,
   }
 };
+
+const NETWORKS: any = {};
+for (const [chainId, net] of Object.entries(ALL_NETWORKS)) {
+  const n = net as any;
+  if (USE_MAINNET ? n.isMainnet : !n.isMainnet) {
+    NETWORKS[chainId] = n;
+  }
+}
 
 export async function processWithdrawals() {
   console.log("--- CryptoVault Multi-Token Withdrawal Processor Starting ---");

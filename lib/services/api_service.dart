@@ -184,6 +184,12 @@ class ApiService {
     return await _dio.get('/run/bikes:getUserPurchases', queryParameters: {'userId': userId});
   }
 
+  // --- Network Methods ---
+
+  Future<Response> getActiveNetworks() async {
+    return await _dio.get('/run/networks:getActiveNetworks');
+  }
+
   // --- Team Methods ---
 
   Future<Response> getTeamStats(String userId, String period) async {

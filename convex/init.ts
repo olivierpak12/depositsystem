@@ -1,4 +1,31 @@
-import { mutation } from "./_generated/server";
+import { action, mutation } from "./_generated/server";
+import { api } from "./_generated/api";
+
+const MAINNET_CHAINS = [1, 137, 42161];
+const TESTNET_CHAINS = [11155111, 80002, 97];
+
+export const applyNetworkMode = action({
+  handler: async (ctx) => {
+    const useMainnet = process.env.USE_MAINNET === "true";
+    const activeChains = useMainnet ? MAINNET_CHAINS : TESTNET_CHAINS;
+
+    const allNetworks = await ctx.runQuery(api.networks.getActiveNetworks);
+    const allStored = await ctx.runQuery(api.networks.getAllNetworks);
+
+    for (const network of allStored) {
+      const shouldBeActive = activeChains.includes(network.chainId);
+      if (network.isActive !== shouldBeActive) {
+        await ctx.runMutation(api.networks.setNetworkActive, {
+          chainId: network.chainId,
+          isActive: shouldBeActive,
+        });
+      }
+    }
+
+    console.log(`[NetworkMode] Switched to ${useMainnet ? "MAINNET" : "TESTNET"}. Active chains:`, activeChains);
+    return { mode: useMainnet ? "mainnet" : "testnet", activeChains };
+  },
+});
 
 export const initializeNetworks = mutation({
   handler: async (ctx) => {
