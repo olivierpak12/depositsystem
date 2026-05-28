@@ -190,6 +190,10 @@ class ApiService {
     return await _dio.get('/run/networks:getActiveNetworks');
   }
 
+  Future<Response> getAllNetworks() async {
+    return await _dio.get('/run/networks:getAllNetworks');
+  }
+
   // --- Team Methods ---
 
   Future<Response> getTeamStats(String userId, String period) async {

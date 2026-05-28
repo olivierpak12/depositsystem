@@ -15,6 +15,22 @@ const BIKE_CATALOG: Record<string, { name: string; price: number; dailyIncome: n
   blue_s10: { name: "BLUE-S10", price: 36888.0, dailyIncome: 4606.0 },
 };
 
+const BIKE_ORDER = [
+  "beginner",
+  "blue_s1",
+  "blue_s2",
+  "blue_s3",
+  "blue_s4",
+  "blue_s5",
+  "blue_s6",
+  "blue_s7",
+  "blue_s8",
+  "blue_s9",
+  "blue_s10",
+];
+
+const UPGRADE_CLOSE_FEE_PERCENT = 2.0;
+
 export const buyBike = mutation({
   args: {
     userId: v.id("users"),
@@ -29,14 +45,95 @@ export const buyBike = mutation({
       .withIndex("by_userId", (q) => q.eq("userId", args.userId))
       .collect();
 
+    const purchases = await ctx.db
+      .query("purchases")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .collect();
+
     const totalBalance = balances.reduce((acc, curr) => acc + BigInt(curr.amount), 0n);
 
-    if (totalBalance < amountMicro) {
+    let refundAmount = 0n;
+    let highestOwnedIndex = -1;
+    for (const purchase of purchases) {
+      const index = BIKE_ORDER.indexOf(purchase.bikeId);
+      if (index >= 0 && index > highestOwnedIndex) {
+        highestOwnedIndex = index;
+      }
+    }
+
+    const targetIndex = BIKE_ORDER.indexOf(args.bikeId);
+    if (targetIndex < 0) {
+      throw new Error("Invalid package selected.");
+    }
+
+    if (args.bikeId === "beginner") {
+      if (highestOwnedIndex >= 0) {
+        throw new Error("You already own a package; purchase the next upgrade instead.");
+      }
+    } else if (highestOwnedIndex < 0) {
+      let highestAffordableIndex = -1;
+      for (let i = 0; i < BIKE_ORDER.length; i++) {
+        const bike = BIKE_CATALOG[BIKE_ORDER[i]];
+        if (!bike) continue;
+        const bikePriceMicros = BigInt(Math.round(bike.price * 1000000));
+        if (totalBalance >= bikePriceMicros) {
+          highestAffordableIndex = i;
+        }
+      }
+      if (highestAffordableIndex < 0) {
+        throw new Error("Insufficient balance");
+      }
+      if (targetIndex !== highestAffordableIndex) {
+        throw new Error("Only the highest affordable package can be purchased first.");
+      }
+    } else {
+      if (targetIndex !== highestOwnedIndex + 1) {
+        throw new Error("You must purchase packages in order.");
+      }
+
+      const refundBikeId = BIKE_ORDER[highestOwnedIndex];
+      const refundBike = BIKE_CATALOG[refundBikeId];
+      if (refundBike) {
+        const feeMultiplier = 1 - UPGRADE_CLOSE_FEE_PERCENT / 100;
+        refundAmount = BigInt(Math.round(refundBike.price * feeMultiplier * 1000000));
+      }
+    }
+
+    const effectiveBalance = totalBalance + refundAmount;
+    if (effectiveBalance < amountMicro) {
       throw new Error("Insufficient balance");
     }
 
+    if (refundAmount > 0n) {
+      if (balances.length > 0) {
+        const balance = balances[0];
+        const currentAmount = BigInt(balance.amount);
+        const newAmount = (currentAmount + refundAmount).toString();
+        await ctx.db.patch(balance._id, { amount: newAmount, updatedAt: Date.now() });
+      } else {
+        await ctx.db.insert("balances", {
+          userId: args.userId,
+          chainId: 1,
+          tokenSymbol: "USDT",
+          amount: refundAmount.toString(),
+          updatedAt: Date.now(),
+        });
+      }
+
+      const refundBikeId = BIKE_ORDER[highestOwnedIndex];
+      const refundPurchase = purchases.find((p) => p.bikeId === refundBikeId);
+      if (refundPurchase) {
+        await ctx.db.delete(refundPurchase._id);
+      }
+    }
+
     let remaining = amountMicro;
-    for (const balance of balances) {
+    const updatedBalances = await ctx.db
+      .query("balances")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .collect();
+
+    for (const balance of updatedBalances) {
       if (remaining <= 0n) break;
       const currentAmount = BigInt(balance.amount);
       if (currentAmount > 0n) {

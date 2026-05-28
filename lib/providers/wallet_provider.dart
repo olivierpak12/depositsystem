@@ -3,16 +3,25 @@ import '../services/api_service.dart';
 
 final networksProvider = FutureProvider<List<dynamic>>((ref) async {
   final apiService = ref.read(apiServiceProvider);
-  try {
-    final response = await apiService.getActiveNetworks();
-    if (response.data is List) {
-      return response.data as List<dynamic>;
+  final activeResponse = await apiService.getActiveNetworks();
+  if (activeResponse.data is List) {
+    final activeNetworks = activeResponse.data as List<dynamic>;
+    if (activeNetworks.isNotEmpty) {
+      return activeNetworks;
     }
-    return [];
-  } catch (e) {
-    print("Error fetching networks: $e");
-    return [];
   }
+
+  try {
+    final fallbackResponse = await apiService.getAllNetworks();
+    if (fallbackResponse.data is List) {
+      return fallbackResponse.data as List<dynamic>;
+    }
+  } catch (e) {
+    // Ignore fallback failure, we'll expose an empty list and let UI handle it.
+    print('networksProvider fallback failed: $e');
+  }
+
+  return [];
 });
 
 final balanceProvider = FutureProvider.family<String, String>((ref, userId) async {

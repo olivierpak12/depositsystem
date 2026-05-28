@@ -1,8 +1,9 @@
 import { action, mutation } from "./_generated/server";
 import { api } from "./_generated/api";
 
-const MAINNET_CHAINS = [1, 137, 42161];
-const TESTNET_CHAINS = [11155111, 80002, 97];
+// Enable only Ethereum and Polygon networks (mainnet + corresponding testnets)
+const MAINNET_CHAINS = [1, 137];
+const TESTNET_CHAINS = [11155111, 80002];
 
 export const applyNetworkMode = action({
   handler: async (ctx) => {
@@ -29,6 +30,8 @@ export const applyNetworkMode = action({
 
 export const initializeNetworks = mutation({
   handler: async (ctx) => {
+    const useMainnet = process.env.USE_MAINNET === "true";
+    const activeChains = useMainnet ? MAINNET_CHAINS : TESTNET_CHAINS;
     const networks = [
       {
         chainId: 1,
@@ -103,14 +106,19 @@ export const initializeNetworks = mutation({
     ];
 
     for (const network of networks) {
+      const shouldBeActive = activeChains.includes(network.chainId);
+      const networkRecord = {
+        ...network,
+        isActive: shouldBeActive,
+      };
       const existing = await ctx.db
         .query("supported_networks")
         .filter((q) => q.eq(q.field("chainId"), network.chainId))
         .first();
       if (!existing) {
-        await ctx.db.insert("supported_networks", network as any);
+        await ctx.db.insert("supported_networks", networkRecord as any);
       } else {
-        await ctx.db.patch(existing._id, network as any);
+        await ctx.db.patch(existing._id, networkRecord as any);
       }
     }
 

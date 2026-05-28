@@ -599,14 +599,28 @@ class LevelScreen extends ConsumerWidget {
   }
 }
 
-class BikeScreen extends StatefulWidget {
+class BikeScreen extends ConsumerStatefulWidget {
   const BikeScreen({super.key});
 
   @override
-  State<BikeScreen> createState() => _BikeScreenState();
+  ConsumerState<BikeScreen> createState() => _BikeScreenState();
 }
 
-class _BikeScreenState extends State<BikeScreen> {
+class _BikeScreenState extends ConsumerState<BikeScreen> {
+  static const _bikeOrder = [
+    'beginner',
+    'blue_s1',
+    'blue_s2',
+    'blue_s3',
+    'blue_s4',
+    'blue_s5',
+    'blue_s6',
+    'blue_s7',
+    'blue_s8',
+    'blue_s9',
+    'blue_s10',
+  ];
+
   late List<BikeModel> bikes;
 
   @override
@@ -707,6 +721,7 @@ class _BikeScreenState extends State<BikeScreen> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final purchasesAsync = ref.watch(purchasesProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -741,47 +756,205 @@ class _BikeScreenState extends State<BikeScreen> {
         shadowColor: const Color(0xFF00C853).withValues(alpha: 0.3),
       ),
       backgroundColor: const Color(0xFF0A0A0A),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Investment Stats Card
-            _buildInvestmentStatsCard(),
-            const SizedBox(height: 24),
-            // Grid of Bikes
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final crossAxisCount = constraints.maxWidth > 900
-                    ? 3
-                    : (constraints.maxWidth > 600 ? 2 : 1);
-                final childAspectRatio = crossAxisCount > 1 ? 1.5 : 3.2;
+      body: purchasesAsync.when(
+        data: (purchases) {
+          final ownedBikeIds = purchases
+              .map((p) => p['bikeId'] as String? ?? '')
+              .toSet();
+          for (final bike in bikes) {
+            bike.isOwned = ownedBikeIds.contains(bike.id);
+          }
+          final userId = ref.watch(authProvider).userId;
+          final balanceAsync = userId != null
+              ? ref.watch(balanceProvider(userId))
+              : const AsyncValue.data('0');
 
-                return GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: crossAxisCount,
-                    mainAxisSpacing: 14,
-                    crossAxisSpacing: 14,
-                    childAspectRatio: childAspectRatio,
-                  ),
-                  itemCount: bikes.length,
-                  itemBuilder: (context, index) => BikeCard(
-                    bike: bikes[index],
-                    colorScheme: colorScheme,
-                    onStatusChanged: () => setState(() {}),
-                  ),
+          return balanceAsync.when(
+            data: (balanceStr) {
+              final userBalance = BigInt.tryParse(balanceStr) ?? BigInt.zero;
+              final highestOwnedIndex = _bikeOrder
+                  .asMap()
+                  .entries
+                  .where((entry) => ownedBikeIds.contains(entry.value))
+                  .map((entry) => entry.key)
+                  .fold<int?>(null, (prev, index) => prev == null ? index : index > prev ? index : prev) ?? -1;
+              final nextBikeIndex = highestOwnedIndex + 1;
+              final hasOwnedPackages = highestOwnedIndex >= 0;
+              final previousOwnedBikeRefund = hasOwnedPackages
+                  ? BigInt.from((bikes[highestOwnedIndex].equipmentPrice * 1000000).round())
+                      * BigInt.from(98) ~/ BigInt.from(100)
+                  : BigInt.zero;
+              final effectiveBalance = userBalance + previousOwnedBikeRefund;
+
+              BigInt maxAffordablePrice = BigInt.from(-1);
+              for (final bike in bikes) {
+                if (!ownedBikeIds.contains(bike.id)) {
+                  final bikePriceMicros = BigInt.from((bike.equipmentPrice * 1000000).round());
+                  if (userBalance >= bikePriceMicros && bikePriceMicros > maxAffordablePrice) {
+                    maxAffordablePrice = bikePriceMicros;
+                  }
+                }
+              }
+
+              String nextPackageMessage;
+              if (nextBikeIndex < bikes.length) {
+                final nextBike = bikes[nextBikeIndex];
+                final currentDailyIncome = hasOwnedPackages
+                    ? bikes[highestOwnedIndex].dailyIncome
+                    : 0.0;
+                final incomeGain = nextBike.dailyIncome - currentDailyIncome;
+                final nextPriceMicros = BigInt.from((nextBike.equipmentPrice * 1000000).round());
+                final neededMicros = effectiveBalance >= nextPriceMicros
+                    ? BigInt.zero
+                    : nextPriceMicros - effectiveBalance;
+                final neededUsd = neededMicros == BigInt.zero
+                    ? '0.00'
+                    : (neededMicros.toDouble() / 1000000).toStringAsFixed(2);
+                nextPackageMessage = neededMicros == BigInt.zero
+                    ? 'Upgrade to ${nextBike.name} for +\$${incomeGain.toStringAsFixed(2)}/day.'
+                    : 'Need \$${neededUsd} more to upgrade to ${nextBike.name} for +\$${incomeGain.toStringAsFixed(2)}/day.';
+              } else if (maxAffordablePrice > BigInt.from(-1)) {
+                final availableBike = bikes.firstWhere(
+                  (bike) => !ownedBikeIds.contains(bike.id) &&
+                      BigInt.from((bike.equipmentPrice * 1000000).round()) == maxAffordablePrice,
                 );
-              },
+                nextPackageMessage =
+                    'You can afford ${availableBike.name} and earn \$${availableBike.dailyIncome.toStringAsFixed(2)}/day.';
+              } else {
+                final starterBike = bikes.firstWhere((bike) => !ownedBikeIds.contains(bike.id));
+                final neededMicros = BigInt.from((starterBike.equipmentPrice * 1000000).round()) - userBalance;
+                final neededUsd = (neededMicros.toDouble() / 1000000).toStringAsFixed(2);
+                nextPackageMessage =
+                    'Need \$${neededUsd} more to afford ${starterBike.name} and earn \$${starterBike.dailyIncome.toStringAsFixed(2)}/day.';
+              }
+
+              return SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildInvestmentStatsCard(nextPackageMessage),
+                    const SizedBox(height: 24),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final crossAxisCount = constraints.maxWidth > 900
+                            ? 3
+                            : (constraints.maxWidth > 600 ? 2 : 1);
+                        final childAspectRatio = crossAxisCount == 3
+                            ? 1.18
+                            : (crossAxisCount == 2 ? 1.28 : 1.4);
+
+                        return GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: crossAxisCount,
+                            mainAxisSpacing: 14,
+                            crossAxisSpacing: 14,
+                            childAspectRatio: childAspectRatio,
+                          ),
+                          itemCount: bikes.length,
+                          itemBuilder: (context, index) {
+                            final bike = bikes[index];
+                            final isOwned = ownedBikeIds.contains(bike.id);
+                            final isSkipped = highestOwnedIndex > index && !isOwned;
+                            final bikePriceMicros = BigInt.from((bike.equipmentPrice * 1000000).round());
+                            final isNextPackage = index == nextBikeIndex;
+                            final isHighestAffordableWhenNoneOwned = !hasOwnedPackages &&
+                                bikePriceMicros == maxAffordablePrice;
+
+                            final canBuy = !isOwned && !isSkipped && (
+                              (hasOwnedPackages && isNextPackage && effectiveBalance >= bikePriceMicros) ||
+                              (!hasOwnedPackages && isHighestAffordableWhenNoneOwned)
+                            );
+
+                            String? disabledReason;
+                            if (isOwned) {
+                              disabledReason = null;
+                            } else if (isSkipped) {
+                              disabledReason = 'Skipped by buying a higher package';
+                            } else if (hasOwnedPackages) {
+                              if (isNextPackage) {
+                                disabledReason = effectiveBalance >= bikePriceMicros
+                                    ? null
+                                    : 'Deposit more or close the current package to upgrade';
+                              } else {
+                                disabledReason = 'Purchase your next upgrade first';
+                              }
+                            } else if (maxAffordablePrice > BigInt.from(-1)) {
+                              disabledReason = isHighestAffordableWhenNoneOwned
+                                  ? null
+                                  : 'Only the highest affordable package is available';
+                            } else {
+                              disabledReason = 'Insufficient balance';
+                            }
+
+                            return BikeCard(
+                              bike: bike,
+                              colorScheme: colorScheme,
+                              isOwned: isOwned,
+                              canBuy: canBuy,
+                              isNextPackage: isNextPackage,
+                              disabledReason: disabledReason,
+                              onStatusChanged: () => setState(() {}),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              );
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.error_outline, size: 48, color: Colors.grey[600]),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Could not load packages',
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        color: Colors.white54,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ],
+          );
+        },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.error_outline, size: 48, color: Colors.grey[600]),
+                const SizedBox(height: 16),
+                Text(
+                  'Could not load packages',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    color: Colors.white54,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildInvestmentStatsCard() {
+  Widget _buildInvestmentStatsCard(String nextPackageMessage) {
     double totalInvestment = 0.0;
     double interestCollectable = 0.0;
     
@@ -802,23 +975,47 @@ class _BikeScreenState extends State<BikeScreen> {
         ),
       ),
       padding: const EdgeInsets.all(20),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildStatItem(
-            icon: '💰',
-            label: 'Current Investment',
-            value: '\$${totalInvestment.toStringAsFixed(2)}',
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildStatItem(
+                icon: '💰',
+                label: 'Current Investment',
+                value: '\$${totalInvestment.toStringAsFixed(2)}',
+              ),
+              Container(
+                width: 1,
+                height: 60,
+                color: const Color(0xFF00C853).withValues(alpha: 0.3),
+              ),
+              _buildStatItem(
+                icon: '📈',
+                label: 'Interest Collectable',
+                value: '\$${interestCollectable.toStringAsFixed(2)}',
+              ),
+            ],
           ),
-          Container(
-            width: 1,
-            height: 60,
-            color: const Color(0xFF00C853).withValues(alpha: 0.3),
+          const SizedBox(height: 16),
+          Text(
+            'Next upgrade',
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+              letterSpacing: 0.5,
+            ),
           ),
-          _buildStatItem(
-            icon: '📈',
-            label: 'Interest Collectable',
-            value: '\$${interestCollectable.toStringAsFixed(2)}',
+          const SizedBox(height: 6),
+          Text(
+            nextPackageMessage,
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              color: Colors.green[200],
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -879,11 +1076,19 @@ class BikeModel {
 class BikeCard extends ConsumerStatefulWidget {
   final BikeModel bike;
   final ColorScheme colorScheme;
+  final bool isOwned;
+  final bool canBuy;
+  final bool isNextPackage;
+  final String? disabledReason;
   final VoidCallback? onStatusChanged;
 
   const BikeCard({
     required this.bike,
     required this.colorScheme,
+    required this.isOwned,
+    required this.canBuy,
+    required this.isNextPackage,
+    this.disabledReason,
     this.onStatusChanged,
     super.key,
   });
@@ -913,8 +1118,49 @@ class _BikeCardState extends ConsumerState<BikeCard> {
       final balance = BigInt.parse(balanceStr);
       final priceInMicro = BigInt.from((widget.bike.equipmentPrice * 1000000).round());
 
-      if (balance < priceInMicro) {
+      BigInt refundAmount = BigInt.zero;
+      final purchasesAsync = ref.read(purchasesProvider);
+      final purchases = purchasesAsync is AsyncData<List<Map<String, dynamic>>>
+          ? purchasesAsync.value
+          : await ref.read(purchasesProvider.future);
+
+      final highestOwnedIndex = purchases
+          .map((p) => _BikeScreenState._bikeOrder.indexOf(p['bikeId'] as String? ?? ''))
+          .where((index) => index >= 0)
+          .fold<int?>(null, (prev, index) => prev == null ? index : index > prev ? index : prev) ?? -1;
+      if (highestOwnedIndex >= 0) {
+        final nextIndex = highestOwnedIndex + 1;
+        if (nextIndex < _BikeScreenState._bikeOrder.length && widget.bike.id == _BikeScreenState._bikeOrder[nextIndex]) {
+          final refundPurchase = purchases.firstWhere(
+            (p) => _BikeScreenState._bikeOrder.indexOf(p['bikeId'] as String? ?? '') == highestOwnedIndex,
+            orElse: () => {},
+          );
+          if (refundPurchase is Map<String, dynamic>) {
+            final refundPrice = (refundPurchase['equipmentPrice'] as num).toDouble();
+            refundAmount = BigInt.from((refundPrice * 1000000).round()) *
+                BigInt.from(98) ~/
+                BigInt.from(100);
+          }
+        }
+      }
+
+      final effectiveBalance = balance + refundAmount;
+      if (effectiveBalance < priceInMicro) {
         _showInsufficientBalanceDialog();
+        return;
+      }
+
+      if (!widget.canBuy) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(widget.disabledReason ?? 'This package is locked until you buy level 1.'),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 3),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
         return;
       }
 
@@ -926,6 +1172,7 @@ class _BikeCardState extends ConsumerState<BikeCard> {
       );
 
       ref.invalidate(balanceProvider(userId));
+      ref.invalidate(purchasesProvider);
 
       if (mounted) {
         setState(() {
@@ -1035,13 +1282,26 @@ class _BikeCardState extends ConsumerState<BikeCard> {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: const Color(0xFF1A1A1A),
+        color: widget.isNextPackage
+            ? const Color(0xFF0C2B16)
+            : const Color(0xFF1A1A1A),
         border: Border.all(
-          color: const Color(0xFF00C853).withValues(alpha: 0.2),
-          width: 1,
+          color: widget.isNextPackage
+              ? const Color(0xFF00C853)
+              : const Color(0xFF00C853).withValues(alpha: 0.2),
+          width: widget.isNextPackage ? 1.5 : 1,
         ),
+        boxShadow: widget.isNextPackage
+            ? [
+                BoxShadow(
+                  color: const Color(0xFF00C853).withOpacity(0.12),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : null,
       ),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       child: Row(
         children: [
           _buildImage(),
@@ -1066,8 +1326,8 @@ class _BikeCardState extends ConsumerState<BikeCard> {
 
   Widget _buildImage() {
     final isCompact = MediaQuery.of(context).size.width > 900;
-    final imgWidth = isCompact ? 80.0 : 100.0;
-    final imgHeight = isCompact ? 110.0 : 140.0;
+    final imgWidth = isCompact ? 80.0 : 92.0;
+    final imgHeight = isCompact ? 96.0 : 120.0;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
@@ -1107,6 +1367,32 @@ class _BikeCardState extends ConsumerState<BikeCard> {
           ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 6),
+        if (widget.isNextPackage)
+          Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFF00C853).withOpacity(0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              'Next upgrade',
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF00C853),
+              ),
+            ),
+          ),
+        Text(
+          'Price: \$${widget.bike.equipmentPrice.toStringAsFixed(2)}',
+          style: GoogleFonts.poppins(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey[300],
+          ),
         ),
       ],
     );
@@ -1192,7 +1478,7 @@ class _BikeCardState extends ConsumerState<BikeCard> {
   }
 
   Widget _buildAction() {
-    if (widget.bike.isOwned) {
+    if (widget.isOwned) {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1217,6 +1503,29 @@ class _BikeCardState extends ConsumerState<BikeCard> {
               ),
             ),
           ],
+        ),
+      );
+    }
+
+    if (!widget.canBuy) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          color: Colors.grey[850],
+          border: Border.all(
+            color: Colors.grey[700]!,
+          ),
+        ),
+        child: Text(
+          widget.disabledReason ?? 'Locked until you purchase the beginner package.',
+          style: GoogleFonts.poppins(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey[400],
+          ),
+          textAlign: TextAlign.center,
         ),
       );
     }
@@ -3407,9 +3716,34 @@ class DepositScreen extends ConsumerStatefulWidget {
 class _DepositScreenState extends ConsumerState<DepositScreen> {
   String selectedNetwork = '';
   String selectedToken = 'USDT';
-  
   final List<String> tokens = ['USDT', 'USDC'];
   List<dynamic> networks = [];
+
+  static const List<Map<String, dynamic>> _mainnetFallbackNetworks = [
+    {'chainId': 1, 'name': 'Ethereum Mainnet'},
+    {'chainId': 137, 'name': 'Polygon Mainnet'},
+  ];
+
+  static const List<Map<String, dynamic>> _testnetFallbackNetworks = [
+    {'chainId': 11155111, 'name': 'Ethereum Sepolia'},
+    {'chainId': 80002, 'name': 'Polygon Amoy'},
+  ];
+
+  List<dynamic> get _visibleNetworks {
+    final useMainnet = (dotenv.env['USE_MAINNET'] == 'true');
+    final filtered = useMainnet
+        ? networks.where((n) => const [1, 137].contains(n['chainId'] as int?)).toList()
+        : networks.where((n) => const [11155111, 80002].contains(n['chainId'] as int?)).toList();
+    if (filtered.isNotEmpty) {
+      return filtered;
+    }
+    return useMainnet ? _mainnetFallbackNetworks : _testnetFallbackNetworks;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3423,8 +3757,18 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
       body: networksAsync.when(
         data: (netList) {
           networks = netList;
-          if (selectedNetwork.isEmpty && networks.isNotEmpty) {
-            selectedNetwork = networks[0]['name'] ?? '';
+          // Debug print to console to confirm networks received
+          print('DepositScreen: networks loaded: ${networks.map((n) => n['name']).toList()}');
+          final netNames = _visibleNetworks
+              .map((n) => n['name'] as String?)
+              .where((name) => name != null && name.isNotEmpty)
+              .cast<String>()
+              .toList();
+          if (selectedNetwork.isEmpty && netNames.isNotEmpty) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              setState(() => selectedNetwork = netNames[0]);
+            });
           }
           return walletAsync.when(
             data: (wallet) {
@@ -3455,6 +3799,18 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
               _buildTokenDropdown(),
               const SizedBox(height: 15),
               _buildNetworkDropdown(),
+              // Debug: show networks received from provider to help troubleshooting
+              if (networks.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Networks: ${networks.map((n) => n['name']).join(', ')}',
+                      style: const TextStyle(color: Colors.white38, fontSize: 12),
+                    ),
+                  ),
+                ),
               const SizedBox(height: 40),
               _buildQRCode(address),
               const SizedBox(height: 40),
@@ -3485,17 +3841,41 @@ class _DepositScreenState extends ConsumerState<DepositScreen> {
   }
 
   Widget _buildNetworkDropdown() {
-    final netNames = networks.map((n) => n['name'] as String).toList();
+    final netNames = _visibleNetworks
+        .map((n) => n['name'] as String?)
+        .where((name) => name != null && name.isNotEmpty)
+        .cast<String>()
+        .toList();
+
+    // Ensure selectedNetwork is always valid or empty
+    if (netNames.isNotEmpty && !netNames.contains(selectedNetwork)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() => selectedNetwork = netNames[0]);
+        }
+      });
+    }
+
     return DropdownButtonFormField<String>(
-      initialValue: selectedNetwork,
+      value: netNames.contains(selectedNetwork) ? selectedNetwork : '',
+      isExpanded: true,
       decoration: InputDecoration(
         labelText: 'Select Network',
         filled: true,
         fillColor: const Color(0xFF1E1E1E),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
       ),
-      items: netNames.map((n) => DropdownMenuItem(value: n, child: Text(n))).toList(),
-      onChanged: (v) => setState(() => selectedNetwork = v!),
+      items: netNames.isEmpty
+          ? [const DropdownMenuItem(value: '', child: Text('No supported networks'))]
+          : [const DropdownMenuItem(value: '', child: Text('Select a network')), ...netNames.map((n) => DropdownMenuItem(value: n, child: Text(n)))],
+      onChanged: netNames.isEmpty
+          ? null
+          : (v) {
+              print('DepositScreen: network changed -> $v');
+              if (v != null && v.isNotEmpty) {
+                setState(() => selectedNetwork = v);
+              }
+            },
     );
   }
 
@@ -3561,6 +3941,27 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
   bool _isLoading = false;
   Timer? _refreshTimer;
   List<dynamic> networks = [];
+
+  static const List<Map<String, dynamic>> _mainnetFallbackNetworks = [
+    {'chainId': 1, 'name': 'Ethereum Mainnet'},
+    {'chainId': 137, 'name': 'Polygon Mainnet'},
+  ];
+
+  static const List<Map<String, dynamic>> _testnetFallbackNetworks = [
+    {'chainId': 11155111, 'name': 'Ethereum Sepolia'},
+    {'chainId': 80002, 'name': 'Polygon Amoy'},
+  ];
+
+  List<dynamic> get _visibleNetworks {
+    final useMainnet = (dotenv.env['USE_MAINNET'] == 'true');
+    final filtered = useMainnet
+        ? networks.where((n) => const [1, 137].contains(n['chainId'] as int?)).toList()
+        : networks.where((n) => const [11155111, 80002].contains(n['chainId'] as int?)).toList();
+    if (filtered.isNotEmpty) {
+      return filtered;
+    }
+    return useMainnet ? _mainnetFallbackNetworks : _testnetFallbackNetworks;
+  }
   
   @override
   void initState() {
@@ -3638,9 +4039,9 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
 
     try {
       final userId = ref.read(authProvider).userId!;
-      final net = networks.cast<Map<String, dynamic>>().firstWhere(
+      final net = _visibleNetworks.cast<Map<String, dynamic>>().firstWhere(
         (n) => n['name'] == selectedNetwork,
-        orElse: () => networks.isNotEmpty ? networks[0] : {'chainId': 137},
+        orElse: () => _visibleNetworks.isNotEmpty ? _visibleNetworks[0] : {'chainId': 137},
       );
       final chainId = net['chainId'] as int;
 
@@ -3733,23 +4134,51 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
                     onChanged: (v) => setState(() => selectedToken = v!),
                   ),
                   const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(color: Colors.white10)),
-                  _buildModernDropdown(
-                    label: 'Target Network',
-                    value: selectedNetwork,
-                    items: networksAsync.when(
-                      data: (netList) {
-                        networks = netList;
-                        if (selectedNetwork.isEmpty && networks.isNotEmpty) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (mounted) setState(() => selectedNetwork = networks[0]['name'] ?? '');
-                          });
-                        }
-                        return networks.map((n) => n['name'] as String).toList();
-                      },
-                      loading: () => <String>[],
-                      error: (_, __) => <String>[],
+                  networksAsync.when(
+                    data: (netList) {
+                      networks = netList;
+                                      final visibleNetworks = _visibleNetworks;
+                      print('WithdrawScreen: visible networks: ${visibleNetworks.map((n) => n['name']).toList()}');
+                      final netNames = visibleNetworks
+                          .map((n) => n['name'] as String?)
+                          .where((name) => name != null && name.isNotEmpty)
+                          .cast<String>()
+                          .toList();
+                      
+                      // Initialize selectedNetwork if not set or invalid
+                      if ((selectedNetwork.isEmpty || !netNames.contains(selectedNetwork)) && netNames.isNotEmpty) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (!mounted) return;
+                          setState(() => selectedNetwork = netNames[0]);
+                        });
+                      }
+                      
+                      return _buildModernDropdown(
+                        label: 'Target Network',
+                        value: netNames.contains(selectedNetwork) ? selectedNetwork : '',
+                        items: netNames,
+                        onChanged: netNames.isEmpty
+                            ? null
+                            : (v) {
+                                print('WithdrawScreen: network changed -> $v');
+                                if (v != null && v.isNotEmpty) {
+                                  setState(() => selectedNetwork = v);
+                                }
+                              },
+                      );
+                    },
+                    loading: () => _buildModernDropdown(
+                      label: 'Target Network',
+                      value: '',
+                      items: const ['Loading...'],
+                      onChanged: null,
                     ),
-                    onChanged: (v) => setState(() => selectedNetwork = v!),
+                    error: (_, __) => _buildModernDropdown(
+                      label: 'Target Network',
+                      value: '',
+                      items: const ['Error loading networks'],
+                      onChanged: null,
+                    ),
                   ),
                 ],
               ),
@@ -3833,18 +4262,31 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
     return Text(title, style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 0.5));
   }
 
-  Widget _buildModernDropdown({required String label, required String value, required List<String> items, required ValueChanged<String?> onChanged}) {
+  Widget _buildModernDropdown({required String label, required String? value, required List<String> items, required ValueChanged<String?>? onChanged}) {
+    // Ensure value always matches one of the items, or use empty string if no valid items
+    String selectedValue = '';
+    if (items.isNotEmpty && value != null && items.contains(value)) {
+      selectedValue = value;
+    }
+    
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: const TextStyle(color: Colors.white54, fontSize: 14)),
-        DropdownButton<String>(
-          value: value,
-          underline: const SizedBox(),
-          dropdownColor: const Color(0xFF2A2A2A),
-          icon: const Icon(Icons.keyboard_arrow_down, color: Colors.greenAccent),
-          items: items.map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontWeight: FontWeight.bold)))).toList(),
-          onChanged: onChanged,
+        Expanded(
+          child: Text(label, style: const TextStyle(color: Colors.white54, fontSize: 14)),
+        ),
+        Expanded(
+          flex: 2,
+          child: DropdownButton<String>(
+            isExpanded: true,
+            value: selectedValue,
+            underline: const SizedBox(),
+            dropdownColor: const Color(0xFF2A2A2A),
+            icon: const Icon(Icons.keyboard_arrow_down, color: Colors.greenAccent),
+            items: items.isEmpty
+                ? [const DropdownMenuItem(value: '', child: Text('Loading...', style: TextStyle(fontWeight: FontWeight.bold)))]
+                : items.map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontWeight: FontWeight.bold)))).toList(),
+            onChanged: items.isEmpty ? null : onChanged,
+          ),
         ),
       ],
     );

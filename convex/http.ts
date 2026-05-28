@@ -41,6 +41,7 @@ http.route({ path: "/mutation/withdrawals:requestWithdrawal", method: "OPTIONS",
 http.route({ path: "/action/etherscanActions:syncUserDeposits", method: "OPTIONS", handler: httpAction(async () => corsResponse()) });
 http.route({ path: "/run/admin:getStats", method: "OPTIONS", handler: httpAction(async () => corsResponse()) });
 http.route({ path: "/run/teams:getTeamStats", method: "OPTIONS", handler: httpAction(async () => corsResponse()) });
+http.route({ path: "/run/bikes:getUserPurchases", method: "OPTIONS", handler: httpAction(async () => corsResponse()) });
 http.route({ path: "/mutation/bikes:buyBike", method: "OPTIONS", handler: httpAction(async () => corsResponse()) });
 http.route({ path: "/mutation/users:requestPasswordReset", method: "OPTIONS", handler: httpAction(async () => corsResponse()) });
 http.route({ path: "/mutation/users:resetPassword", method: "OPTIONS", handler: httpAction(async () => corsResponse()) });
@@ -56,6 +57,8 @@ http.route({ path: "/run/referrals:getTeamStats", method: "OPTIONS", handler: ht
 http.route({ path: "/run/referrals:getTeamMembers", method: "OPTIONS", handler: httpAction(async () => corsResponse()) });
 http.route({ path: "/run/referrals:getReferralEarningsHistory", method: "OPTIONS", handler: httpAction(async () => corsResponse()) });
 http.route({ path: "/run/referrals:getLeaderboard", method: "OPTIONS", handler: httpAction(async () => corsResponse()) });
+http.route({ path: "/run/networks:getActiveNetworks", method: "OPTIONS", handler: httpAction(async () => corsResponse()) });
+http.route({ path: "/run/networks:getAllNetworks", method: "OPTIONS", handler: httpAction(async () => corsResponse()) });
 
 // --- Auth Routes ---
 
@@ -125,6 +128,38 @@ http.route({
   handler: httpAction(async (ctx) => {
     try {
       const result = await ctx.runQuery(api.users.listUsers);
+      return jsonResponse(result);
+    } catch (e: any) {
+      return jsonResponse(e.message, 400);
+    }
+  }),
+});
+
+http.route({
+  path: "/run/networks:getActiveNetworks",
+  method: "GET",
+  handler: httpAction(async (ctx) => {
+    try {
+      // Initialize networks in database (sets isActive based on USE_MAINNET)
+      await ctx.runMutation(api.init.initializeNetworks);
+      // Apply network mode based on USE_MAINNET env var
+      await ctx.runAction(api.init.applyNetworkMode);
+      const result = await ctx.runQuery(api.networks.getActiveNetworks);
+      return jsonResponse(result);
+    } catch (e: any) {
+      return jsonResponse(e.message, 400);
+    }
+  }),
+});
+
+http.route({
+  path: "/run/networks:getAllNetworks",
+  method: "GET",
+  handler: httpAction(async (ctx) => {
+    try {
+      // Initialize networks if needed and return all configured networks.
+      await ctx.runMutation(api.init.initializeNetworks);
+      const result = await ctx.runQuery(api.networks.getAllNetworks);
       return jsonResponse(result);
     } catch (e: any) {
       return jsonResponse(e.message, 400);
@@ -313,6 +348,23 @@ http.route({
       if (!userId) return jsonResponse("Missing userId", 400);
 
       const result = await ctx.runQuery(api.withdrawals.getWithdrawals, { userId: userId as any });
+      return jsonResponse(result);
+    } catch (e: any) {
+      return jsonResponse(e.message, 400);
+    }
+  }),
+});
+
+http.route({
+  path: "/run/bikes:getUserPurchases",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const { searchParams } = new URL(request.url);
+      const userId = searchParams.get("userId");
+      if (!userId) return jsonResponse("Missing userId", 400);
+
+      const result = await ctx.runQuery(api.bikes.getUserPurchases, { userId: userId as any });
       return jsonResponse(result);
     } catch (e: any) {
       return jsonResponse(e.message, 400);
