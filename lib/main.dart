@@ -1146,16 +1146,67 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen>
                       ),
                     )
                   : const SizedBox.shrink(),
-              AppPrimaryButton(
-                label: isClaiming ? 'Claiming...' : 'Claim',
-                icon: isClaiming ? Icons.hourglass_top : Icons.monetization_on_outlined,
-                onPressed: canClaim && !isClaiming ? () => _handleClaim(purchaseId) : null,
-                height: 32,
-                fullWidth: false,
+              _ClaimButton(
+                isClaiming: isClaiming,
+                canClaim: canClaim,
+                onClaim: () => _handleClaim(purchaseId),
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ClaimButton extends StatelessWidget {
+  const _ClaimButton({
+    required this.isClaiming,
+    required this.canClaim,
+    required this.onClaim,
+  });
+
+  final bool isClaiming;
+  final bool canClaim;
+  final VoidCallback onClaim;
+
+  @override
+  Widget build(BuildContext context) {
+    final isEnabled = canClaim && !isClaiming;
+
+    return AppPressable(
+      onTap: isEnabled ? onClaim : null,
+      child: Container(
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          gradient: isEnabled
+              ? AppGradients.primary
+              : null,
+          color: isEnabled ? null : AppColors.textMuted.withValues(alpha: 0.12),
+          border: isEnabled
+              ? null
+              : Border.all(color: AppColors.textMuted.withValues(alpha: 0.2)),
+        ),
+        alignment: Alignment.center,
+        child: isClaiming
+            ? SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.textMuted,
+                ),
+              )
+            : Text(
+                isEnabled ? 'Claim' : 'Claim',
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: isEnabled ? Colors.black : AppColors.textMuted,
+                ),
+              ),
       ),
     );
   }
