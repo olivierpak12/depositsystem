@@ -37,42 +37,54 @@ export const requestWithdrawal = mutation({
       throw new Error("Invalid transaction password.");
     }
 
-    const balances = await ctx.db
+    const earningsBalance = await ctx.db
       .query("balances")
-      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
-      .collect();
-    
-    const tokenBalances = balances.filter(b => b.tokenSymbol === args.token);
-    const totalBalance = tokenBalances.reduce((acc, curr) => acc + BigInt(curr.amount), 0n);
+      .withIndex("by_user_chain_token", (q) =>
+        q.eq("userId", args.userId).eq("chainId", 0).eq("tokenSymbol", args.token)
+      )
+      .first();
 
-    if (totalBalance < totalToDeduct) {
-      throw new Error(`Insufficient balance. You need $${(Number(totalToDeduct) / 1000000).toFixed(2)}.`);
+    const claimedMicros = earningsBalance ? BigInt(earningsBalance.amount) : 0n;
+    const referralMicros = BigInt(Math.round((user.referralBalance ?? 0) * 1000000));
+    const teamRewards = BigInt(user.teamRewardsBalance ?? "0");
+    const availableBalance = claimedMicros + referralMicros + teamRewards;
+
+    if (availableBalance < totalToDeduct) {
+      throw new Error(`Insufficient withdrawable balance. You only have \$${(Number(availableBalance) / 1000000).toFixed(2)} available.`);
     }
 
     let remainingToDeduct = totalToDeduct;
-    const targetChainBalance = tokenBalances.find(b => b.chainId === args.chainId);
-    if (targetChainBalance) {
-      const amountOnTarget = BigInt(targetChainBalance.amount);
-      const toDeduct = amountOnTarget > remainingToDeduct ? remainingToDeduct : amountOnTarget;
-      await ctx.db.patch(targetChainBalance._id, { 
-        amount: (amountOnTarget - toDeduct).toString(),
-        updatedAt: Date.now() 
+
+    // Deduct from chainId=0 (claimed earnings) first
+    if (earningsBalance && remainingToDeduct > 0n) {
+      const amountOnChain0 = BigInt(earningsBalance.amount);
+      const toDeduct = amountOnChain0 > remainingToDeduct ? remainingToDeduct : amountOnChain0;
+      await ctx.db.patch(earningsBalance._id, {
+        amount: (amountOnChain0 - toDeduct).toString(),
+        updatedAt: Date.now(),
       });
       remainingToDeduct -= toDeduct;
     }
 
+    // Deduct from referralBalance if needed
     if (remainingToDeduct > 0n) {
-      for (const bal of tokenBalances) {
-        if (bal.chainId === args.chainId) continue;
-        if (remainingToDeduct <= 0n) break;
-        const amountOnChain = BigInt(bal.amount);
-        const toDeduct = amountOnChain > remainingToDeduct ? remainingToDeduct : amountOnChain;
-        await ctx.db.patch(bal._id, { 
-          amount: (amountOnChain - toDeduct).toString(),
-          updatedAt: Date.now() 
-        });
-        remainingToDeduct -= toDeduct;
-      }
+      const referralMicrosLeft = BigInt(Math.round((user.referralBalance ?? 0) * 1000000));
+      const referralToDeduct = referralMicrosLeft > remainingToDeduct ? remainingToDeduct : referralMicrosLeft;
+      const newReferralBalance = (Number(referralMicrosLeft - referralToDeduct) / 1000000);
+      await ctx.db.patch(args.userId, {
+        referralBalance: newReferralBalance,
+      });
+      remainingToDeduct -= referralToDeduct;
+    }
+
+    // Deduct from teamRewardsBalance if needed
+    if (remainingToDeduct > 0n) {
+      const teamRewardsLeft = BigInt(user.teamRewardsBalance ?? "0");
+      const teamToDeduct = teamRewardsLeft > remainingToDeduct ? remainingToDeduct : teamRewardsLeft;
+      const newTeamRewards = (teamRewardsLeft - teamToDeduct).toString();
+      await ctx.db.patch(args.userId, {
+        teamRewardsBalance: newTeamRewards,
+      });
     }
 
     const withdrawalId = await ctx.db.insert("withdrawals", {
@@ -110,12 +122,12 @@ export const updateWithdrawalStatus = mutation({
       const refundAmount = BigInt(withdrawal.amount) + WITHDRAWAL_FEE;
       const balance = await ctx.db
         .query("balances")
-        .withIndex("by_user_chain_token", (q) => 
+        .withIndex("by_user_chain_token", (q) =>
           q.eq("userId", withdrawal.userId)
-           .eq("chainId", withdrawal.chainId)
+           .eq("chainId", 0)
            .eq("tokenSymbol", withdrawal.token)
         )
-        .unique();
+        .first();
 
       if (balance) {
         const newAmount = (BigInt(balance.amount) + refundAmount).toString();
@@ -123,7 +135,7 @@ export const updateWithdrawalStatus = mutation({
       } else {
         await ctx.db.insert("balances", {
           userId: withdrawal.userId,
-          chainId: withdrawal.chainId,
+          chainId: 0,
           tokenSymbol: withdrawal.token,
           amount: refundAmount.toString(),
           updatedAt: Date.now(),

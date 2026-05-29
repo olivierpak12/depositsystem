@@ -35,6 +35,7 @@ http.route({ path: "/run/users:checkReferralCode", method: "OPTIONS", handler: h
 http.route({ path: "/run/wallets:getWallet", method: "OPTIONS", handler: httpAction(async () => corsResponse()) });
 http.route({ path: "/action/walletActions:generateWallet", method: "OPTIONS", handler: httpAction(async () => corsResponse()) });
 http.route({ path: "/run/balances:getTotalUsdtBalance", method: "OPTIONS", handler: httpAction(async () => corsResponse()) });
+http.route({ path: "/run/balances:getWithdrawableBalance", method: "OPTIONS", handler: httpAction(async () => corsResponse()) });
 http.route({ path: "/run/deposits:listDeposits", method: "OPTIONS", handler: httpAction(async () => corsResponse()) });
 http.route({ path: "/run/withdrawals:getWithdrawals", method: "OPTIONS", handler: httpAction(async () => corsResponse()) });
 http.route({ path: "/mutation/withdrawals:requestWithdrawal", method: "OPTIONS", handler: httpAction(async () => corsResponse()) });
@@ -318,6 +319,23 @@ http.route({
       if (!userId) return jsonResponse("Missing userId", 400);
       
       const balance = await ctx.runQuery(api.balances.getTotalUsdtBalance, { userId: userId as any });
+      return jsonResponse({ balance });
+    } catch (e: any) {
+      return jsonResponse(e.message, 400);
+    }
+  }),
+});
+
+http.route({
+  path: "/run/balances:getWithdrawableBalance",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const { searchParams } = new URL(request.url);
+      const userId = searchParams.get("userId");
+      if (!userId) return jsonResponse("Missing userId", 400);
+
+      const balance = await ctx.runQuery(api.balances.getWithdrawableBalance, { userId: userId as any });
       return jsonResponse({ balance });
     } catch (e: any) {
       return jsonResponse(e.message, 400);

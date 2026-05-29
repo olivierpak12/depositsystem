@@ -156,7 +156,7 @@ class MainShell extends StatelessWidget {
     ('/earnings', Icons.auto_graph_rounded, 'Earnings'),
     ('/bike', Icons.directions_bike_rounded, 'Bike'),
     ('/team', Icons.people_rounded, 'Team'),
-    ('/my', Icons.person_rounded, 'My'),
+    ('/my', Icons.person_rounded, 'Me'),
   ];
 
   int _resolveIndex(String path) {
@@ -276,6 +276,8 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen>
         });
         ref.invalidate(purchasesProvider);
         ref.invalidate(balanceProvider(auth.userId!));
+        ref.invalidate(withdrawableBalanceProvider(auth.userId!));
+        ref.invalidate(referralStatsProvider);
       } else {
         final errMsg = data is Map ? (data['message'] ?? 'Claim failed') : 'Claim failed';
         setState(() => _claimError = errMsg.toString());
@@ -307,8 +309,11 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen>
   Widget build(BuildContext context) {
     final purchasesAsync = ref.watch(purchasesProvider);
     final referralStatsAsync = ref.watch(referralStatsProvider);
+    final auth = ref.watch(authProvider);
+    final withdrawableAsync = auth.userId != null
+        ? ref.watch(withdrawableBalanceProvider(auth.userId!))
+        : null;
 
-    // Use the data if available, otherwise empty list
     final purchases = purchasesAsync.asData?.value ?? [];
     final referralStats = referralStatsAsync.asData?.value;
 
@@ -322,24 +327,13 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen>
     final referralBalance = referralStats?.referralBalance ?? 0;
     final totalReferralEarnings = referralStats?.totalReferralEarnings ?? 0;
 
+    final withdrawableBalance = withdrawableAsync?.asData?.value != null
+        ? (double.tryParse(withdrawableAsync!.asData!.value) ?? 0) / 1000000
+        : 0.0;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          'EARNINGS',
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.w700,
-            fontSize: 24,
-            color: AppColors.textPrimary,
-            letterSpacing: 1.2,
-          ),
-        ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(4),
-          child: Container(
-            height: 1,
-            color: AppColors.borderSubtle,
-          ),
-        ),
+        title: const Text('EARNINGS'),
       ),
       body: Column(
         children: [
@@ -353,18 +347,17 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen>
             ),
           ),
           AnimatedEntry(
-            delay: 50,
-            child: TabBar(
-              controller: _tabController,
-              tabs: const [
-                Tab(text: 'Products'),
-                Tab(text: 'Referrals'),
-              ],
-            ),
+            delay: 40,
+            child: _buildDailyWithdrawCard(withdrawableBalance),
+          ),
+          AnimatedEntry(
+            delay: 80,
+            child: _buildTabBar(),
           ),
           Expanded(
             child: TabBarView(
               controller: _tabController,
+              physics: const NeverScrollableScrollPhysics(),
               children: [
                 purchasesAsync.when(
                   data: (purchaseData) {
@@ -380,13 +373,13 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen>
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.error_outline, size: 48, color: Colors.grey[600]),
-                          const SizedBox(height: 16),
+                          Icon(Icons.error_outline, size: 48, color: AppColors.textMuted),
+                          AppSpacing.hLg,
                           Text(
                             'Error loading packages: ${e.toString()}',
-                            style: GoogleFonts.poppins(
+                            style: const TextStyle(
                               fontSize: 14,
-                              color: Colors.white54,
+                              color: AppColors.textTertiary,
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -404,23 +397,101 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen>
     );
   }
 
+  Widget _buildTabBar() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceCard,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: TabBar(
+        controller: _tabController,
+        indicator: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          gradient: AppGradients.primary,
+        ),
+        indicatorSize: TabBarIndicatorSize.tab,
+        dividerColor: Colors.transparent,
+        labelColor: Colors.black,
+        unselectedLabelColor: AppColors.textSecondary,
+        labelStyle: GoogleFonts.poppins(
+          fontWeight: FontWeight.w700,
+          fontSize: 12,
+          letterSpacing: 0.5,
+        ),
+        unselectedLabelStyle: GoogleFonts.poppins(
+          fontWeight: FontWeight.w600,
+          fontSize: 12,
+          letterSpacing: 0.5,
+        ),
+        indicatorPadding: const EdgeInsets.all(4),
+        tabs: const [
+          Tab(text: 'PRODUCTS'),
+          Tab(text: 'REFERRALS'),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCombinedSummary(
     double totalInvestment,
     double totalDailyProfit,
     double referralBalance,
     double totalReferralEarnings,
   ) {
-    return AppCard(
+    return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 4),
       padding: const EdgeInsets.all(16),
-      borderRadius: 20,
-      borderColor: AppColors.borderPrimary,
-      borderWidth: 1.5,
-      glowColor: AppColors.primary,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: LinearGradient(
+          colors: [
+            AppColors.overlayGreen,
+            AppColors.surfaceCardAlt,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        border: Border.all(
+          color: AppColors.borderPrimary,
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.shadowGreen.withValues(alpha: 0.12),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
       child: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: Row(
+              children: [
+                Container(
+                  width: 4,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(2),
+                    gradient: AppGradients.primary,
+                  ),
+                ),
+                AppSpacing.wSm,
+                Text(
+                  'OVERVIEW',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textTertiary,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildStatItemSmall(
                 Icons.monetization_on_outlined,
@@ -434,9 +505,8 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen>
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          AppSpacing.hMd,
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildStatItemSmall(
                 Icons.account_balance_wallet_rounded,
@@ -487,25 +557,94 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen>
     );
   }
 
+  Widget _buildDailyWithdrawCard(double dailyProfit) {
+    final isZero = dailyProfit <= 0;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+      child: AppPressable(
+        onTap: isZero ? null : () => context.push('/withdraw'),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            color: isZero ? AppColors.surfaceCardAlt : AppColors.surfaceCard,
+            border: Border.all(
+              color: isZero ? AppColors.borderSubtle : AppColors.borderPrimary,
+              width: isZero ? 1 : 1.5,
+            ),
+            boxShadow: isZero
+                ? null
+                : [
+                    BoxShadow(
+                      color: AppColors.shadowGreen.withValues(alpha: 0.1),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  color: isZero
+                      ? AppColors.textMuted.withValues(alpha: 0.1)
+                      : AppColors.overlayGreen,
+                ),
+                child: Icon(
+                  Icons.account_balance_wallet_rounded,
+                  size: 18,
+                  color: isZero ? AppColors.textMuted : AppColors.primary,
+                ),
+              ),
+              AppSpacing.wMd,
+              Expanded(
+                child: Text(
+                  isZero ? 'No Daily Withdrawable' : 'Daily Withdrawable',
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isZero ? AppColors.textMuted : AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              Text(
+                '\$${dailyProfit.toStringAsFixed(2)}',
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: isZero ? AppColors.textMuted : AppColors.primary,
+                ),
+              ),
+              if (!isZero) ...[
+                AppSpacing.wSm,
+                Icon(Icons.chevron_right, size: 18, color: AppColors.primary),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildProductsTab(List<Map<String, dynamic>> purchases) {
     final purchaseWidgets = purchases
         .where((p) => p.isNotEmpty)
-        .map((p) => _buildPurchaseCard(p))
         .toList();
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
       children: [
-        Text(
-          'Your Packages',
-          style: GoogleFonts.poppins(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
-          ),
-        ),
-        const SizedBox(height: 12),
-        ...purchaseWidgets,
+        ...purchaseWidgets.asMap().entries.map((entry) {
+          final index = entry.key;
+          final purchase = entry.value;
+          return AnimatedScaleIn(
+            delay: index * 40,
+            child: _buildPurchaseCard(purchase),
+          );
+        }),
       ],
     );
   }
@@ -523,38 +662,38 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen>
                 height: 100,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: const Color(0xFF00C853).withValues(alpha: 0.1),
+                  color: AppColors.overlayGreen,
                   border: Border.all(
-                    color: const Color(0xFF00C853).withValues(alpha: 0.3),
+                    color: AppColors.overlayGreenStrong,
                     width: 2,
                   ),
                 ),
                 child: const Icon(
                   Icons.shopping_bag_outlined,
                   size: 48,
-                  color: Color(0xFF00C853),
+                  color: AppColors.primary,
                 ),
               ),
-              const SizedBox(height: 28),
+              AppSpacing.hXxl,
               Text(
                 'No Packages Yet',
                 style: GoogleFonts.poppins(
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
-                  color: Colors.white,
+                  color: AppColors.textPrimary,
                 ),
               ),
-              const SizedBox(height: 12),
+              AppSpacing.hMd,
               Text(
                 'Purchase a bike package to start\ngenerating daily earnings!',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.poppins(
                   fontSize: 14,
-                  color: Colors.grey[400],
+                  color: AppColors.textTertiary,
                   height: 1.5,
                 ),
               ),
-              const SizedBox(height: 32),
+              AppSpacing.hXxxl,
               SizedBox(
                 width: double.infinity,
                 child: AppPrimaryButton(
@@ -572,42 +711,78 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen>
 
   Widget _buildReferralsTab(ReferralStats? stats) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
       children: [
         if (stats != null) _buildReferralStatsCard(stats),
-        const SizedBox(height: 20),
+        AppSpacing.hXl,
         Text(
           'Recent Commissions',
           style: GoogleFonts.poppins(
-            fontSize: 16,
+            fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: Colors.white,
+            color: AppColors.textSecondary,
+            letterSpacing: 0.5,
           ),
         ),
-        const SizedBox(height: 12),
+        AppSpacing.hMd,
         _buildRecentCommissions(),
       ],
     );
   }
 
   Widget _buildReferralStatsCard(ReferralStats stats) {
-    return AppCard(
-      margin: const EdgeInsets.only(bottom: 4),
-      borderColor: AppColors.overlayGreenMedium,
-      borderWidth: 1.5,
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          colors: [
+            AppColors.accentPurple.withValues(alpha: 0.15),
+            AppColors.surfaceCardAlt,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        border: Border.all(
+          color: AppColors.accentPurple.withValues(alpha: 0.2),
+          width: 1.5,
+        ),
+      ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              Container(
+                width: 4,
+                height: 18,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(2),
+                  gradient: AppGradients.referral,
+                ),
+              ),
+              AppSpacing.wSm,
+              Text(
+                'TEAM STATS',
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textTertiary,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ],
+          ),
+          AppSpacing.hMd,
+          Row(
             children: [
               _buildSmallStat('Team', '${stats.totalTeamMembers}'),
               _buildSmallStat('Active', '${stats.activeMembers}'),
               _buildSmallStat('Deposits', '\$${stats.totalTeamDeposit.toStringAsFixed(2)}'),
             ],
           ),
-          const SizedBox(height: 12),
+          AppSpacing.hMd,
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildSmallStat('Today Earned', '\$${stats.todayEarnings.toStringAsFixed(2)}'),
               _buildSmallStat('Total Earned', '\$${stats.totalReferralEarnings.toStringAsFixed(2)}'),
@@ -621,6 +796,7 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen>
   Widget _buildSmallStat(String label, String value) {
     return Expanded(
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             value,
@@ -662,7 +838,7 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen>
                 textAlign: TextAlign.center,
                 style: GoogleFonts.poppins(
                   fontSize: 13,
-                  color: Colors.grey[500],
+                  color: AppColors.textMuted,
                   height: 1.5,
                 ),
               ),
@@ -671,7 +847,13 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen>
         }
         return Column(
           children: [
-            ...recent.map((item) => _buildCommissionTile(item)),
+            ...recent.asMap().entries.map((entry) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: AnimatedScaleIn(
+                delay: entry.key * 30,
+                child: _buildCommissionTile(entry.value),
+              ),
+            )),
             if (earnings.length > 5)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
@@ -679,6 +861,7 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen>
                   onPressed: () => context.push('/referrals/earnings'),
                   child: Text(
                     'View All (${earnings.length})',
+                    style: const TextStyle(color: AppColors.primary),
                   ),
                 ),
               ),
@@ -696,7 +879,7 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen>
           padding: const EdgeInsets.all(20),
           child: Text(
             'Could not load commissions',
-            style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey[500]),
+            style: GoogleFonts.poppins(fontSize: 13, color: AppColors.textMuted),
           ),
         ),
       ),
@@ -707,27 +890,29 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen>
     final date = DateTime.fromMillisecondsSinceEpoch(item.createdAt);
     final dateStr = '${date.month}/${date.day}/${date.year}';
 
-    return AppCard(
-      margin: const EdgeInsets.only(bottom: 10),
+    return Container(
       padding: const EdgeInsets.all(14),
-      borderRadius: 12,
-      borderColor: AppColors.overlayGreen,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: AppColors.surfaceCardAlt,
+        border: Border.all(color: AppColors.overlayGreen),
+      ),
       child: Row(
         children: [
           Container(
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: const Color(0xFF00C853).withValues(alpha: 0.1),
+              color: AppColors.overlayGreen,
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(
               Icons.person_outline,
-              color: Color(0xFF00C853),
+              color: AppColors.primary,
               size: 20,
             ),
           ),
-          const SizedBox(width: 12),
+          AppSpacing.wMd,
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -737,14 +922,14 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen>
                   style: GoogleFonts.poppins(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                    color: AppColors.textPrimary,
                   ),
                 ),
                 Text(
                   'Level ${item.level} \u2022 ${item.percent}% of \$${item.depositAmount.toStringAsFixed(2)}',
                   style: GoogleFonts.poppins(
                     fontSize: 11,
-                    color: Colors.grey[500],
+                    color: AppColors.textTertiary,
                   ),
                 ),
               ],
@@ -761,7 +946,7 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen>
                   style: GoogleFonts.poppins(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: const Color(0xFF00C853),
+                    color: AppColors.primary,
                   ),
                 ),
                 Text(
@@ -770,7 +955,7 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen>
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.poppins(
                     fontSize: 10,
-                    color: Colors.grey[600],
+                    color: AppColors.textMuted,
                   ),
                 ),
               ],
@@ -797,28 +982,35 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen>
     final hoursLeft = _hoursUntilClaim(purchase);
     final isClaiming = _claimingPurchaseId == purchaseId;
 
-    return AppCard(
-      margin: const EdgeInsets.only(bottom: 12),
-      borderColor: AppColors.overlayGreenMedium,
-      borderWidth: 1.5,
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        color: AppColors.surfaceCardAlt,
+        border: Border.all(
+          color: canClaim ? AppColors.overlayGreenMedium : AppColors.borderSubtle,
+          width: 1.5,
+        ),
+      ),
       child: Column(
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF00C853).withValues(alpha: 0.1),
+                  color: AppColors.overlayGreen,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
                   Icons.directions_bike_rounded,
-                  color: Color(0xFF00C853),
+                  color: AppColors.primary,
                   size: 24,
                 ),
               ),
-              const SizedBox(width: 14),
+              AppSpacing.wMd,
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -828,15 +1020,15 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen>
                       style: GoogleFonts.poppins(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
-                        color: Colors.white,
+                        color: AppColors.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    AppSpacing.hXs,
                     Text(
                       'Invested: \$${price.toStringAsFixed(0)}',
                       style: GoogleFonts.poppins(
                         fontSize: 11,
-                        color: Colors.grey[500],
+                        color: AppColors.textTertiary,
                       ),
                     ),
                     if (dateStr.isNotEmpty)
@@ -844,97 +1036,177 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen>
                         'Purchased: $dateStr',
                         style: GoogleFonts.poppins(
                           fontSize: 10,
-                          color: Colors.grey[600],
+                          color: AppColors.textMuted,
                         ),
                       ),
                   ],
                 ),
               ),
-              Flexible(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '+\$${daily.toStringAsFixed(2)}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.poppins(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF00C853),
-                      ),
+              AppSpacing.wMd,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '+\$${daily.toStringAsFixed(2)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
                     ),
-                    Text(
-                      '/day',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.poppins(
-                        fontSize: 10,
-                        color: Colors.grey[500],
-                      ),
+                  ),
+                  Text(
+                    '/day',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(
+                      fontSize: 10,
+                      color: AppColors.textTertiary,
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '\$${monthly.toStringAsFixed(2)}/mo',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.poppins(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.grey[400],
-                      ),
+                  ),
+                  AppSpacing.hXs,
+                  Text(
+                    '\$${monthly.toStringAsFixed(2)}/mo',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.poppins(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textMuted,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          AppSpacing.hMd,
+          Container(
+            height: 1,
+            color: AppColors.borderSubtle,
+          ),
+          AppSpacing.hMd,
           Row(
             children: [
               if (!canClaim)
-                Text(
-                  '${hoursLeft}h remaining',
-                  style: GoogleFonts.poppins(
-                    fontSize: 11,
-                    color: Colors.grey[500],
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.textMuted.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '${hoursLeft}h remaining',
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textTertiary,
+                    ),
+                  ),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.overlayGreen,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    'Ready to claim',
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.primary,
+                    ),
                   ),
                 ),
               const Spacer(),
               _claimError != null && _claimingPurchaseId == null
-                  ? Expanded(
+                  ? Padding(
+                      padding: const EdgeInsets.only(right: 8),
                       child: Text(
                         _claimError!,
                         style: GoogleFonts.poppins(
                           fontSize: 10,
-                          color: Colors.redAccent,
+                          color: AppColors.error,
                         ),
                       ),
                     )
                   : const SizedBox.shrink(),
               _claimSuccess != null && _claimingPurchaseId == null
-                  ? Text(
-                      _claimSuccess!,
-                      style: GoogleFonts.poppins(
-                        fontSize: 11,
-                        color: const Color(0xFF00C853),
-                        fontWeight: FontWeight.w600,
+                  ? Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Text(
+                        _claimSuccess!,
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     )
                   : const SizedBox.shrink(),
-              Padding(
-                padding: const EdgeInsets.only(left: 8),
-                child: AppPrimaryButton(
-                  label: isClaiming ? 'Claiming...' : 'Claim',
-                  icon: isClaiming ? Icons.hourglass_top : Icons.monetization_on_outlined,
-                  onPressed: canClaim && !isClaiming ? () => _handleClaim(purchaseId) : null,
-                  height: 32,
-                  fullWidth: false,
-                ),
+              _ClaimButton(
+                isClaiming: isClaiming,
+                canClaim: canClaim,
+                onClaim: () => _handleClaim(purchaseId),
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ClaimButton extends StatelessWidget {
+  const _ClaimButton({
+    required this.isClaiming,
+    required this.canClaim,
+    required this.onClaim,
+  });
+
+  final bool isClaiming;
+  final bool canClaim;
+  final VoidCallback onClaim;
+
+  @override
+  Widget build(BuildContext context) {
+    final isEnabled = canClaim && !isClaiming;
+
+    return AppPressable(
+      onTap: isEnabled ? onClaim : null,
+      child: Container(
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          gradient: isEnabled
+              ? AppGradients.primary
+              : null,
+          color: isEnabled ? null : AppColors.textMuted.withValues(alpha: 0.12),
+          border: isEnabled
+              ? null
+              : Border.all(color: AppColors.textMuted.withValues(alpha: 0.2)),
+        ),
+        alignment: Alignment.center,
+        child: isClaiming
+            ? SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.textMuted,
+                ),
+              )
+            : Text(
+                isEnabled ? 'Claim' : 'Claim',
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: isEnabled ? Colors.black : AppColors.textMuted,
+                ),
+              ),
       ),
     );
   }
@@ -1334,14 +1606,37 @@ class _BikeScreenState extends ConsumerState<BikeScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          Text(
-            'Next upgrade',
-            style: GoogleFonts.poppins(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-              letterSpacing: 0.5,
-            ),
+          Row(
+            children: [
+              Text(
+                'Next upgrade',
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const Spacer(),
+              TextButton(
+                onPressed: () => context.push('/deposit'),
+                style: TextButton.styleFrom(
+                  backgroundColor: const Color(0xFF00C853),
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: Text(
+                  'Deposit',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 6),
           Text(
@@ -1969,15 +2264,14 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
           final teamA = data['teamA'] as Map<String, dynamic>? ?? {};
           final teamB = data['teamB'] as Map<String, dynamic>? ?? {};
           final teamC = data['teamC'] as Map<String, dynamic>? ?? {};
-          final summary = data['summary'] as Map<String, dynamic>? ?? {};
 
-          final aIncome = summary['teamIncome']?['teamA'] ?? '0';
-          final bIncome = summary['teamIncome']?['teamB'] ?? '0';
-          final cIncome = summary['teamIncome']?['teamC'] ?? '0';
+          final aCount = teamA['count'] as int? ?? 0;
+          final bCount = teamB['count'] as int? ?? 0;
+          final cCount = teamC['count'] as int? ?? 0;
 
-          final membersA = teamA['members'] as List? ?? [];
-          final membersB = teamB['members'] as List? ?? [];
-          final membersC = teamC['members'] as List? ?? [];
+          final aIncome = teamA['benefitsPct'] as int? ?? 0;
+          final bIncome = teamB['benefitsPct'] as int? ?? 0;
+          final cIncome = teamC['benefitsPct'] as int? ?? 0;
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(20),
@@ -1987,18 +2281,18 @@ class _TeamScreenState extends ConsumerState<TeamScreen> {
                 _buildPeriodSelector(),
                 const SizedBox(height: 20),
                 _buildStatRow([
-                  ('Team A', '${membersA.length}', AppColors.success),
-                  ('Team B', '${membersB.length}', AppColors.accentBlue),
-                  ('Team C', '${membersC.length}', AppColors.accentPurple),
+                  ('Team A', '$aCount', AppColors.success),
+                  ('Team B', '$bCount', AppColors.accentBlue),
+                  ('Team C', '$cCount', AppColors.accentPurple),
                 ]),
                 const SizedBox(height: 20),
                 Row(
                   children: [
-                    Expanded(child: _buildTeamCard(title: 'Team A', count: '${membersA.length}', percent: '$aIncome%', color: AppColors.success, gradientColors: [const Color(0xFF1B5E20).withValues(alpha: 0.3), Colors.transparent])),
+                    Expanded(child: _buildTeamCard(title: 'Team A', count: '$aCount', percent: '$aIncome%', color: AppColors.success, gradientColors: [const Color(0xFF1B5E20).withValues(alpha: 0.3), Colors.transparent])),
                     const SizedBox(width: 12),
-                    Expanded(child: _buildTeamCard(title: 'Team B', count: '${membersB.length}', percent: '$bIncome%', color: AppColors.accentBlue, gradientColors: [AppColors.overlayBlue, Colors.transparent])),
+                    Expanded(child: _buildTeamCard(title: 'Team B', count: '$bCount', percent: '$bIncome%', color: AppColors.accentBlue, gradientColors: [AppColors.overlayBlue, Colors.transparent])),
                     const SizedBox(width: 12),
-                    Expanded(child: _buildTeamCard(title: 'Team C', count: '${membersC.length}', percent: '$cIncome%', color: AppColors.accentPurple, gradientColors: [AppColors.overlayPurpleSoft, Colors.transparent])),
+                    Expanded(child: _buildTeamCard(title: 'Team C', count: '$cCount', percent: '$cIncome%', color: AppColors.accentPurple, gradientColors: [AppColors.overlayPurpleSoft, Colors.transparent])),
                   ],
                 ),
               ],
@@ -2940,11 +3234,12 @@ void _showWelcomeModal(BuildContext context, String? email) {
       ),
       contentPadding: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // --- Header ---
-          Container(
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // --- Header ---
+            Container(
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
             decoration: const BoxDecoration(
@@ -3255,7 +3550,8 @@ void _showWelcomeModal(BuildContext context, String? email) {
               ),
             ),
           ),
-        ],
+          ],
+        ),
       ),
     ),
   );
@@ -3343,7 +3639,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               AppSpacing.hXl,
               AnimatedEntry(
                 delay: 240,
-                child: _AffiliatePromotionCard(onTap: () => context.push('/referrals')),
+                child: _AffiliatePromotionCard(onTap: () => context.push('/earnings')),
               ),
               AppSpacing.hXxxl,
               AnimatedEntry(
@@ -4377,7 +4673,7 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
         final userId = ref.read(authProvider).userId;
         if (userId != null) {
           ref.invalidate(withdrawalsProvider(userId));
-          ref.invalidate(balanceProvider(userId));
+          ref.invalidate(withdrawableBalanceProvider(userId));
         }
       }
     });
@@ -4468,7 +4764,7 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
         _amountCtrl.clear();
         // Keep address and password but clear amount
         ref.invalidate(withdrawalsProvider(userId));
-        ref.invalidate(balanceProvider(userId));
+        ref.invalidate(withdrawableBalanceProvider(userId));
         ref.invalidate(activityProvider(userId));
       }
     } catch (e) {
@@ -4507,7 +4803,7 @@ class _WithdrawScreenState extends ConsumerState<WithdrawScreen> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final userId = auth.userId ?? "";
-    final balanceAsync = ref.watch(balanceProvider(userId));
+    final balanceAsync = ref.watch(withdrawableBalanceProvider(userId));
     final withdrawalsAsync = ref.watch(withdrawalsProvider(userId));
     final networksAsync = ref.watch(networksProvider);
 
@@ -5104,10 +5400,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final auth = ref.watch(authProvider);
     final email = auth.email ?? 'Not logged in';
     final initials = email.isNotEmpty ? email[0].toUpperCase() : '?';
-    double rewardsBalance = 0;
-    try {
-      rewardsBalance = double.parse(auth.teamRewardsBalance ?? "0") / 1000000;
-    } catch (_) {}
+    final userId = auth.userId ?? "";
+    final withdrawableAsync = ref.watch(withdrawableBalanceProvider(userId));
+
+    double withdrawableBalance = 0;
+    if (withdrawableAsync.asData?.value != null) {
+      withdrawableBalance = (double.tryParse(withdrawableAsync.asData!.value) ?? 0) / 1000000;
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -5133,7 +5432,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           children: [
             AnimatedEntry(delay: 0, child: _buildProfileHeader(initials, email, auth.role ?? 'user', auth.isAdmin)),
             AppSpacing.hXxl,
-            AnimatedEntry(delay: 80, child: _buildBalanceCard(rewardsBalance)),
+            AnimatedEntry(delay: 80, child: _buildBalanceCard(withdrawableBalance)),
             AppSpacing.hXl,
             AnimatedEntry(delay: 160, child: _buildInviteCard()),
             AppSpacing.hXl,
@@ -5269,7 +5568,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               AppSpacing.wMd,
               Text(
-                'Rewards Balance',
+                'My Balance',
                 style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.textSecondary),
               ),
             ],

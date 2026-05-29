@@ -147,17 +147,49 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   String _handleError(dynamic e) {
+    String raw = '';
     if (e is DioException) {
       if (e.response?.data != null) {
-        String errorMessage = e.response!.data.toString().replaceAll('"', '');
-        return errorMessage
-            .replaceFirst(RegExp(r'\[CONVEX.*?\]\s*'), '')
-            .replaceFirst('Uncaught Error: ', '')
-            .trim();
+        raw = e.response!.data.toString().replaceAll('"', '');
+      } else {
+        raw = e.message ?? '';
       }
-      return e.message ?? "Connection error";
+    } else {
+      raw = e.toString();
     }
-    return e.toString();
+
+    final message = raw
+        .replaceFirst(RegExp(r'\[CONVEX.*?\]\s*'), '')
+        .replaceFirst('Uncaught Error: ', '')
+        .trim()
+        .toLowerCase();
+
+    if (message.contains('already exists') || message.contains('email already in use') || message.contains('duplicate')) {
+      return 'This email is already registered. Try logging in instead.';
+    }
+    if (message.contains('invalid credentials') || message.contains('wrong password') || message.contains('invalid email')) {
+      return 'Invalid email or password. Please try again.';
+    }
+    if (message.contains('not found') || message.contains('user not found') || message.contains('account not found')) {
+      return 'No account found with this email. Please register first.';
+    }
+    if (message.contains('password') && (message.contains('weak') || message.contains('too short') || message.contains('invalid'))) {
+      return 'Password must be at least 8 characters with letters and numbers.';
+    }
+    if (message.contains('referral') || message.contains('invitation') || message.contains('invalid code')) {
+      return 'Invalid referral code. Please check and try again.';
+    }
+    if (message.contains('rate limit') || message.contains('too many requests')) {
+      return 'Too many attempts. Please wait a moment before trying again.';
+    }
+    if (message.contains('network') || message.contains('connection') || message.contains('timeout')) {
+      return 'Connection error. Please check your internet and try again.';
+    }
+    if (message.contains('email') && (message.contains('verify') || message.contains('not verified'))) {
+      return 'Please verify your email address before continuing.';
+    }
+
+    return 'Something went wrong. Please try again later.';
   }
 
   Future<bool> checkReferralCode(String code) async {

@@ -108,6 +108,10 @@ class ApiService {
     return await _dio.post('/action/withdrawalActions:processAllPending');
   }
 
+  Future<Response> getWithdrawableBalance(String userId) async {
+    return await _dio.get('/run/balances:getWithdrawableBalance', queryParameters: {'userId': userId});
+  }
+
   // --- Data Methods ---
 
   Future<Response> getBalance(String userId) async {
